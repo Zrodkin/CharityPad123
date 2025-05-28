@@ -41,6 +41,19 @@ class KioskStore: ObservableObject {
     
     init() {
         loadFromUserDefaults()
+        
+        // NEW: Listen for catalog state clear notifications
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("ClearCatalogState"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.clearCatalogState()
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     // MARK: - Public Methods
@@ -254,10 +267,25 @@ class KioskStore: ObservableObject {
         catalogService.fetchPresetDonations()
     }
     
-    /// Update preset donations with catalog item IDs
+    /// Update preset donations with catalog item IDs - with stale data handling
     private func updatePresetDonationsFromCatalog(_ catalogItems: [DonationItem]) {
+        print("🔄 Updating preset donations from catalog with \(catalogItems.count) items")
+        
         // Skip if there are no catalog items
         if catalogItems.isEmpty {
+            print("⚠️ No catalog items received, marking all as unsynced")
+            // Mark all existing items as not synced but don't clear IDs yet
+            var updatedDonations: [PresetDonation] = []
+            for donation in presetDonations {
+                updatedDonations.append(PresetDonation(
+                    id: donation.id,
+                    amount: donation.amount,
+                    catalogItemId: donation.catalogItemId, // Keep ID for now
+                    isSync: false  // But mark as not synced
+                ))
+            }
+            presetDonations = updatedDonations
+            saveToUserDefaults()
             return
         }
         
@@ -269,23 +297,36 @@ class KioskStore: ObservableObject {
         
         // Update local preset donations with catalog item IDs
         var updatedDonations: [PresetDonation] = []
+        var hasStaleItems = false
         
         for donation in presetDonations {
             if let amount = Double(donation.amount),
                let catalogItem = catalogItemMap[amount] {
-                // Update with catalog info
-                updatedDonations.append(PresetDonation(
+                // Found matching catalog item
+                let newDonation = PresetDonation(
                     id: donation.id,
                     amount: donation.amount,
                     catalogItemId: catalogItem.id,
                     isSync: true
-                ))
+                )
+                updatedDonations.append(newDonation)
+                
+                // Check if the catalog ID actually changed (item was recreated)
+                if donation.catalogItemId != nil && donation.catalogItemId != catalogItem.id {
+                    print("📋 Catalog ID updated for amount \(donation.amount): \(donation.catalogItemId ?? "nil") -> \(catalogItem.id)")
+                }
             } else {
-                // Keep original but mark as not synced
+                // No matching catalog item found
+                if donation.catalogItemId != nil {
+                    // Had an ID but no longer matches - this is stale data
+                    hasStaleItems = true
+                    print("⚠️ Stale catalog ID detected for amount \(donation.amount)")
+                }
+                
                 updatedDonations.append(PresetDonation(
                     id: donation.id,
                     amount: donation.amount,
-                    catalogItemId: donation.catalogItemId,
+                    catalogItemId: nil,  // Clear stale ID
                     isSync: false
                 ))
             }
@@ -296,6 +337,41 @@ class KioskStore: ObservableObject {
         
         // Save the updated state
         saveToUserDefaults()
+        
+        // If we detected stale items, log it but don't auto-retry here
+        // Let the user's next save operation handle the sync
+        if hasStaleItems {
+            print("⚠️ Some items have stale catalog IDs - they will be recreated on next sync")
+        }
+        
+        print("✅ Updated \(updatedDonations.count) preset donations, \(updatedDonations.filter { $0.isSync }.count) synced")
+    }
+
+    /// NEW: Clear all catalog state when disconnecting
+    func clearCatalogState() {
+        print("🔄 Clearing all catalog state due to authentication change")
+        
+        // Clear parent item ID
+        if let catalogService = catalogService {
+            catalogService.parentItemId = nil
+            catalogService.presetDonations = []
+            catalogService.lastSyncTime = nil
+        }
+        
+        // Mark all preset donations as unsynced and clear IDs
+        var clearedDonations: [PresetDonation] = []
+        for donation in presetDonations {
+            clearedDonations.append(PresetDonation(
+                id: donation.id,
+                amount: donation.amount,
+                catalogItemId: nil,
+                isSync: false
+            ))
+        }
+        presetDonations = clearedDonations
+        
+        saveToUserDefaults()
+        print("✅ Catalog state cleared")
     }
     
     /// Add a new preset donation amount

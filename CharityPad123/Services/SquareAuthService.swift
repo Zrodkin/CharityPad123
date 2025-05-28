@@ -650,6 +650,12 @@ class SquareAuthService: ObservableObject {
         isAuthenticating = false
         authError = nil
         
+        // NEW: Clear catalog state when auth changes
+        NotificationCenter.default.post(
+            name: Notification.Name("ClearCatalogState"),
+            object: nil
+        )
+        
         // Post notification that auth state changed
         NotificationCenter.default.post(name: .squareAuthenticationStatusChanged, object: nil)
         
