@@ -263,6 +263,8 @@ class SquareAuthService: ObservableObject {
                             self.refreshToken = refreshToken
                             self.merchantId = merchantId
                             self.locationId = locationId
+                            self.organizationId = "org_\(merchantId)"
+                            
                             
                             // Parse expiration date
                             let dateFormatter = ISO8601DateFormatter()

@@ -28,13 +28,13 @@ struct SquareConfig {
   
   // OAuth scopes needed for complete donation system functionality
   static let scopes = [
-      "MERCHANT_PROFILE_READ",    // ✅ Already have - for merchant info and locations
-      "PAYMENTS_WRITE",           // ✅ Already have - for processing payments
-      "PAYMENTS_WRITE_IN_PERSON", // ✅ Already have - for in-person payments with Square hardware
-      "PAYMENTS_READ",            // ✅ Already have - for reading payment details
-      "ITEMS_READ",               // ❌ MISSING - Required for fetching preset donation amounts
-      "ITEMS_WRITE",              // ❌ MISSING - Required for managing preset donation catalog
-      "ORDERS_WRITE"              // ❌ MISSING - Required for creating donation orders
+      "MERCHANT_PROFILE_READ",  
+      "PAYMENTS_WRITE",
+      "PAYMENTS_WRITE_IN_PERSON",
+      "PAYMENTS_READ",
+      "ITEMS_READ",
+      "ITEMS_WRITE",
+      "ORDERS_WRITE"
   ]
   
   // Generate the OAuth URL for authorization - using backend approach
