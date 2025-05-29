@@ -263,7 +263,7 @@ class SquareAuthService: ObservableObject {
                             self.refreshToken = refreshToken
                             self.merchantId = merchantId
                             self.locationId = locationId
-                            self.organizationId = "org_\(merchantId)"
+                            //self.organizationId = "org_\(merchantId)"
                             
                             
                             // Parse expiration date
@@ -645,6 +645,9 @@ class SquareAuthService: ObservableObject {
         tokenExpirationDate = nil
         pendingAuthState = nil
         
+        // ADD THIS LINE HERE:
+        UserDefaults.standard.removeObject(forKey: organizationIdKey)
+        
         // Reset state
         isAuthenticated = false
         isAuthenticating = false
@@ -661,6 +664,8 @@ class SquareAuthService: ObservableObject {
         
         print("All local authentication data cleared")
     }
+    
+    
     
     // MARK: - Helper Methods
     
