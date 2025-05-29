@@ -4,6 +4,10 @@ struct AdminDashboardView: View {
     @State private var selectedTab: String? = "home"
     @State private var showLogoutAlert = false
     @State private var isLoggingOut = false
+    
+    // 🔧 FIX 1: Add dedicated state to prevent double-taps
+    @State private var isProcessingLogout = false
+    
     @AppStorage("isInAdminMode") private var isInAdminMode: Bool = true
     @EnvironmentObject private var organizationStore: OrganizationStore
     @EnvironmentObject private var kioskStore: KioskStore
@@ -51,7 +55,6 @@ struct AdminDashboardView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 24)
-                .background(Color(.systemBackground))
                 
                 // Navigation list
                 List(selection: $selectedTab) {
@@ -90,7 +93,7 @@ struct AdminDashboardView: View {
                         
                         NavigationLink(value: "readers") {
                             AdminNavItem(
-                                icon: "creditcard.wireless.fill",
+                                icon: "creditcard.fill",
                                 title: "Card Readers",
                                 subtitle: "Hardware management"
                             )
@@ -165,7 +168,7 @@ struct AdminDashboardView: View {
                 .padding(.vertical, 16)
                 .background(
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(.secondarySystemBackground))
+                        .fill(Color(.tertiarySystemBackground))
                 )
                 .padding(.horizontal, 16)
                 
@@ -198,15 +201,22 @@ struct AdminDashboardView: View {
                     .disabled(!squareAuthService.isAuthenticated)
                     .opacity(squareAuthService.isAuthenticated ? 1.0 : 0.5)
                     
-                    // Logout button
+                    // 🔧 FIX 2: Improved logout button with state guards
                     Button(action: {
+                        // Prevent double-taps and clicks while processing
+                        guard !isProcessingLogout && !isLoggingOut else {
+                            print("⚠️ Logout already in progress, ignoring tap")
+                            return
+                        }
+                        
+                        print("🔘 Logout button tapped")
                         showLogoutAlert = true
                     }) {
                         HStack {
                             Image(systemName: "arrow.right.square.fill")
                                 .font(.title3)
                             
-                            Text("Logout")
+                            Text(isProcessingLogout ? "Processing..." : "Logout")
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
@@ -214,12 +224,14 @@ struct AdminDashboardView: View {
                         .background(Color(.tertiarySystemBackground))
                         .foregroundStyle(.red)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .opacity(isProcessingLogout ? 0.6 : 1.0)
                     }
+                    .disabled(isProcessingLogout || isLoggingOut) // 🔧 FIX 3: Disable while processing
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
             }
-            .background(Color(.systemGroupedBackground))
+            .background(Color(.systemBackground))
             .navigationBarHidden(true)
             
         } detail: {
@@ -248,18 +260,27 @@ struct AdminDashboardView: View {
             }
             .background(Color(.systemGroupedBackground))
         }
-        .alert(isPresented: $showLogoutAlert) {
-            Alert(
-                title: Text("Logout"),
-                message: Text("Are you sure you want to logout? You will need to authenticate again to access the admin panel."),
-                primaryButton: .destructive(Text("Logout")) {
-                    showLogoutAlert = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        initiateLogoutProcess()
-                    }
-                },
-                secondaryButton: .cancel()
-            )
+        // 🔧 FIX 4: Improved alert with proper state management
+        .alert("Logout", isPresented: $showLogoutAlert) {
+            Button("Cancel", role: .cancel) {
+                print("🚫 Logout cancelled by user")
+                showLogoutAlert = false
+                isProcessingLogout = false
+            }
+            Button("Logout", role: .destructive) {
+                print("✅ Logout confirmed by user")
+                showLogoutAlert = false
+                
+                // 🔧 FIX 5: Set processing state immediately
+                isProcessingLogout = true
+                
+                // 🔧 FIX 6: Use a longer delay to ensure alert dismissal
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    initiateLogoutProcess()
+                }
+            }
+        } message: {
+            Text("Are you sure you want to logout? You will need to authenticate again to access the admin panel.")
         }
         .overlay(
             Group {
@@ -268,7 +289,7 @@ struct AdminDashboardView: View {
                 }
             }
         )
-        .onChange(of: squareAuthService.isAuthenticated) { newValue in
+        .onChange(of: squareAuthService.isAuthenticated) { _, newValue in
             if newValue {
                 squarePaymentService.initializeSDK()
             }
@@ -283,33 +304,85 @@ struct AdminDashboardView: View {
         }
     }
     
-    // MARK: - Logout Methods (unchanged functionality)
+    // MARK: - 🔧 FIX 7: Improved Logout Methods with Better Error Handling
     
     private func initiateLogoutProcess() {
-        isLoggingOut = true
+        print("🔄 Starting logout process...")
         
-        if squareAuthService.isAuthenticated {
-            print("Logout: Deauthorizing Square SDK...")
-            squarePaymentService.deauthorizeSDK {
-                print("Logout: SDK deauthorization complete.")
-                self.attemptServerDisconnect()
+        // Ensure we're on main thread and not already logging out
+        DispatchQueue.main.async {
+            guard !self.isLoggingOut else {
+                print("⚠️ Already logging out, skipping duplicate request")
+                return
             }
-        } else {
-            print("Logout: SDK already deauthorized or was never authorized. Skipping deauth.")
-            self.attemptServerDisconnect()
+            
+            self.isLoggingOut = true
+            self.isProcessingLogout = true
+            
+            // 🔧 FIX 8: Use Task for better async handling
+            Task {
+                await self.performLogoutSequence()
+            }
         }
     }
     
+    @MainActor
+    private func performLogoutSequence() async {
+        print("🔄 Performing logout sequence...")
+        
+        // Step 1: Deauthorize SDK if authenticated
+        if squareAuthService.isAuthenticated {
+            print("🔐 Deauthorizing Square SDK...")
+            await withCheckedContinuation { continuation in
+                squarePaymentService.deauthorizeSDK {
+                    print("✅ SDK deauthorization complete")
+                    continuation.resume()
+                }
+            }
+        }
+        
+        // Step 2: Attempt server disconnect (non-blocking)
+        print("🌐 Attempting server disconnect...")
+        await withCheckedContinuation { continuation in
+            squareAuthService.disconnectFromServer { success in
+                print("🌐 Server disconnect result: \(success)")
+                continuation.resume()
+            }
+        }
+        
+        // Step 3: Clean up local state
+        print("🧹 Cleaning up local state...")
+        squareReaderService.stopMonitoring()
+        donationViewModel.resetDonation()
+        squareAuthService.clearLocalAuthData()
+        
+        // Step 4: Final UI state updates with proper timing
+        print("🎯 Updating final UI state...")
+        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
+        
+        self.isInAdminMode = true
+        UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        
+        // Reset all logout states
+        self.isLoggingOut = false
+        self.isProcessingLogout = false
+        
+        print("✅ Logout process complete!")
+    }
+    
+    // 🔧 FIX 9: Fallback cleanup method (keeping original structure as backup)
     private func attemptServerDisconnect() {
-        print("Logout: Attempting to disconnect from server...")
+        print("🌐 [FALLBACK] Attempting to disconnect from server...")
         squareAuthService.disconnectFromServer { serverDisconnectSuccess in
-            print("Logout: Server disconnect attempt finished (success: \(serverDisconnectSuccess)).")
-            self.finalizeClientSideLogout()
+            print("🌐 [FALLBACK] Server disconnect result: \(serverDisconnectSuccess)")
+            DispatchQueue.main.async {
+                self.finalizeClientSideLogout()
+            }
         }
     }
     
     private func finalizeClientSideLogout() {
-        print("Logout: Finalizing client-side logout...")
+        print("🧹 [FALLBACK] Finalizing client-side logout...")
         squareReaderService.stopMonitoring()
         donationViewModel.resetDonation()
         squareAuthService.clearLocalAuthData()
@@ -318,12 +391,13 @@ struct AdminDashboardView: View {
             self.isInAdminMode = true
             UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
             self.isLoggingOut = false
-            print("Logout: Process complete. Should navigate to Onboarding.")
+            self.isProcessingLogout = false
+            print("✅ [FALLBACK] Logout process complete!")
         }
     }
 }
 
-// MARK: - Supporting Views
+// MARK: - Supporting Views (unchanged)
 
 struct AdminNavItem: View {
     let icon: String

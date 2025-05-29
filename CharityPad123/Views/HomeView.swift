@@ -45,9 +45,9 @@ struct HomeView: View {
                                     .foregroundColor(.white)
                                     .font(.headline)
                             }
-                            .padding()
-                            .background(Color.black.opacity(0.7))
-                            .cornerRadius(10)
+                                .padding()
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(10)
                         )
                 }
             }
@@ -133,6 +133,7 @@ struct HomeView: View {
     }
     
     // Extract home page content to a computed property for cleaner code
+    // CONSISTENT LAYOUT: Using standard positioning
     private var homePageContent: some View {
         ZStack {
             // Background image
@@ -152,38 +153,46 @@ struct HomeView: View {
                         }
                     }
             }
-
-            // Dark overlay
+            
             Color.black.opacity(0.3)
                 .edgesIgnoringSafeArea(.all)
-
-            // Tap to donate text
-            VStack {
-                Text(kioskStore.headline)
-                    .font(.system(size: 90, weight: .bold))
-                    .foregroundColor(.white)
-                    .shadow(radius: 10)
-                    .multilineTextAlignment(.center)
+            
+            // CONSISTENT: Centered content with standard positioning
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: KioskLayoutConstants.topContentOffset)
                 
-                if !kioskStore.subtext.isEmpty {
-                    Text(kioskStore.subtext)
-                        .font(.system(size: 30))
+                VStack(spacing: 20) {
+                    Text(kioskStore.headline)
+                        .font(.system(size: 90, weight: .bold))
                         .foregroundColor(.white)
-                        .shadow(radius: 5)
+                        .shadow(radius: 10)
                         .multilineTextAlignment(.center)
-                        .padding(.top, 20)
+                    
+                    if !kioskStore.subtext.isEmpty {
+                        Text(kioskStore.subtext)
+                            .font(.system(size: 30))
+                            .foregroundColor(.white)
+                            .shadow(radius: 5)
+                            .multilineTextAlignment(.center)
+                    }
                 }
+                .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
+                .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
+                
+                Spacer()
+                    .frame(height: KioskLayoutConstants.bottomSafeArea)
             }
-            .offset(y: -20)
         }
-        .contentShape(Rectangle())
-    }
-}
+             .contentShape(Rectangle())
+         }
+     }
 
-struct HomeView_Previews: PreviewProvider {
-    static var previews: some View {
-        HomeView()
-            .environmentObject(DonationViewModel())
-            .environmentObject(KioskStore())
-    }
-}
+     // MARK: - Preview (moved outside of HomeView struct)
+     struct HomeView_Previews: PreviewProvider {
+         static var previews: some View {
+             HomeView()
+                 .environmentObject(DonationViewModel())
+                 .environmentObject(KioskStore())
+         }
+     }

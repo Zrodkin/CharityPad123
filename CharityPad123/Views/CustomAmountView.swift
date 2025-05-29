@@ -12,7 +12,7 @@ struct UpdatedCustomAmountView: View {
     
     var body: some View {
         ZStack {
-            // Background image (from old design)
+            // Background image
             if let backgroundImage = kioskStore.backgroundImage {
                 Image(uiImage: backgroundImage)
                     .resizable()
@@ -27,21 +27,25 @@ struct UpdatedCustomAmountView: View {
                     .blur(radius: 5)
             }
             
-            // Dark overlay (from old design)
             Color.black.opacity(0.55)
                 .edgesIgnoringSafeArea(.all)
             
-            VStack(spacing: 20) {
-                // Clean amount display with cute shake animation
+            // CONSISTENT: Same layout structure as other views
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: KioskLayoutConstants.topContentOffset)
+                
+                // Amount display
                 Text("$\(amountString.isEmpty ? "0" : amountString)")
                     .font(.system(size: 65, weight: .bold))
                     .foregroundColor(.white)
-                    .padding(.top, 120)
-                    .padding(.bottom, 10)
                     .offset(x: shakeOffset)
                     .animation(.easeInOut(duration: 0.1), value: shakeOffset)
                 
-                // Error message (with modern animations)
+                Spacer()
+                    .frame(height: 20)
+                
+                // Error message
                 if let errorMessage = errorMessage {
                     Text(errorMessage)
                         .font(.system(size: 16))
@@ -54,7 +58,10 @@ struct UpdatedCustomAmountView: View {
                         .transition(.opacity)
                 }
                 
-                // Keypad (old design layout with modern functionality)
+                Spacer()
+                    .frame(height: 30)
+                
+                // Keypad (keep all your existing keypad code)
                 VStack(spacing: 12) {
                     // Row 1
                     HStack(spacing: 12) {
@@ -83,9 +90,9 @@ struct UpdatedCustomAmountView: View {
                         }
                     }
                     
-                    // Row 4 (old design layout)
+                    // Row 4
                     HStack(spacing: 12) {
-                        // Delete button (old design)
+                        // Delete button
                         Button(action: handleDelete) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 12)
@@ -103,7 +110,7 @@ struct UpdatedCustomAmountView: View {
                             handleNumberPress("0")
                         }
                         
-                        // Next button (always enabled so we can show cute shake)
+                        // Next button
                         Button(action: {
                             handleDone()
                         }) {
@@ -119,11 +126,11 @@ struct UpdatedCustomAmountView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 20)
-                .frame(maxWidth: 800)
-                .padding(.horizontal, 20)
+                .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
+                .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
                 
                 Spacer()
+                    .frame(height: KioskLayoutConstants.bottomSafeArea)
             }
         }
         .navigationBarBackButtonHidden(true)

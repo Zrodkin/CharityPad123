@@ -1,3 +1,4 @@
+// MARK: - Updated CheckoutView with Consistent Layout
 import SwiftUI
 import SquareMobilePaymentsSDK
 
@@ -22,7 +23,7 @@ struct UpdatedCheckoutView: View {
     @State private var processingState: ProcessingState = .ready
     @State private var orderId: String? = nil
     @State private var paymentId: String? = nil
-    @State private var useOrderBasedFlow = true // Toggle between order-based and direct payment
+    @State private var useOrderBasedFlow = true
     
     // Processing state enum
     enum ProcessingState {
@@ -43,57 +44,69 @@ struct UpdatedCheckoutView: View {
                     .edgesIgnoringSafeArea(.all)
                     .blur(radius: 5)
             } else {
-                // Use a simple color instead of gradient to avoid compatibility issues
                 Color.blue
                     .edgesIgnoringSafeArea(.all)
             }
             
-            // Content overlay
             Color.black.opacity(0.5)
                 .edgesIgnoringSafeArea(.all)
             
-            // Main content
-            VStack(spacing: 30) {
-                // Title & Amount
+            // CONSISTENT: Same layout structure as other kiosk views
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: KioskLayoutConstants.topContentOffset)
+                
+                // Title
                 Text("Donation Amount")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(.system(size: KioskLayoutConstants.titleFontSize, weight: .bold))
                     .foregroundColor(.white)
                 
+                Spacer()
+                    .frame(height: 20)
+                
+                // Amount display
                 Text(formatAmount(amount))
                     .font(.system(size: 50, weight: .bold))
                     .foregroundColor(.white)
-                    .padding(.bottom, 20)
                 
-                // Status section
-                statusSection
+                Spacer()
+                    .frame(height: KioskLayoutConstants.titleBottomSpacing)
                 
-                // Process payment button
-                Button(action: processPayment) {
-                    HStack {
-                        Image(systemName: buttonIcon)
-                        Text(buttonText)
+                // Content area - Status and button
+                VStack(spacing: 24) {
+                    // Status section
+                    statusSection
+                    
+                    // Process payment button
+                    Button(action: processPayment) {
+                        HStack {
+                            Image(systemName: buttonIcon)
+                            Text(buttonText)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(buttonColor)
+                        )
+                        .foregroundColor(.white)
+                        .font(.headline)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(buttonColor)
-                    )
+                    .disabled(isButtonDisabled)
+                    
+                    // Cancel button
+                    Button("Cancel") {
+                        onDismiss()
+                    }
                     .foregroundColor(.white)
-                    .font(.headline)
+                    .padding()
                 }
-                .disabled(isButtonDisabled)
-                .padding(.horizontal)
+                .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
+                .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
                 
-                // Cancel button
-                Button("Cancel") {
-                    onDismiss()
-                }
-                .foregroundColor(.white)
-                .padding()
+                Spacer()
+                    .frame(height: KioskLayoutConstants.bottomSafeArea)
             }
-            .padding()
             
             // Success overlay
             if showingThankYou {
@@ -106,35 +119,34 @@ struct UpdatedCheckoutView: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-        .navigationBarItems(leading: Button(action: {
-            onDismiss()
-        }) {
-            Image(systemName: "chevron.left")
-                .foregroundColor(.white)
-                .padding(8)
-                .background(Circle().fill(Color.white.opacity(0.2)))
-        })
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    onDismiss()
+                }) {
+                    Image(systemName: "chevron.left")
+                        .foregroundColor(.white)
+                        .padding(8)
+                        .background(Circle().fill(Color.white.opacity(0.2)))
+                }
+            }
+        }
         .onAppear {
-            // In kiosk mode, we just check if reader is connected but don't offer pairing
             if !paymentService.isReaderConnected {
                 paymentService.connectToReader()
             }
         }
         .onReceive(paymentService.$paymentError) { error in
-            // Check if there's an error
             if error != nil {
                 processingState = .error
                 showingError = true
             }
         }
         .onReceive(paymentService.$isProcessingPayment) { isProcessing in
-            // Update state based on payment processing
             if isProcessing {
                 processingState = .processingPayment
             } else if processingState == .processingPayment && !isProcessing {
-                // Payment processing finished
                 if paymentService.paymentError == nil {
-                    // Success
                     processingState = .completed
                     showingThankYou = true
                 }
@@ -161,7 +173,7 @@ struct UpdatedCheckoutView: View {
                     .foregroundColor(.white)
             }
             
-            // Processing status (if applicable)
+            // Processing status
             if processingState == .creatingOrder {
                 HStack {
                     ProgressView()
@@ -178,7 +190,7 @@ struct UpdatedCheckoutView: View {
                 }
             }
             
-            // Optional: Show current order ID if available
+            // Order ID display
             if let orderId = orderId {
                 Text("Order: \(orderId)")
                     .font(.caption)
@@ -254,7 +266,6 @@ struct UpdatedCheckoutView: View {
                 Text("Your donation has been processed.")
                     .foregroundColor(.white)
                 
-                // Display order ID and payment ID if available
                 if let orderId = orderId {
                     Text("Order: \(orderId)")
                         .font(.caption)
@@ -280,7 +291,6 @@ struct UpdatedCheckoutView: View {
             .padding()
         }
         .onAppear {
-            // Auto dismiss after 3 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 onDismiss()
             }
@@ -329,7 +339,6 @@ struct UpdatedCheckoutView: View {
         return formatter.string(from: NSNumber(value: amount)) ?? "$\(amount)"
     }
     
-    /// Main payment processing method - chooses between order-based and direct flow
     private func processPayment() {
         if useOrderBasedFlow {
             processOrderBasedPayment()
@@ -338,25 +347,20 @@ struct UpdatedCheckoutView: View {
         }
     }
     
-    /// NEW: Order-based payment processing flow (recommended)
     private func processOrderBasedPayment() {
-        // Check if authenticated first
         if !squareAuthService.isAuthenticated {
             showingSquareAuth = true
             return
         }
         
-        // Check if reader connected
         if !paymentService.isReaderConnected {
             paymentService.paymentError = "Card reader not connected. Please contact staff."
             showingError = true
             return
         }
         
-        // Reset state
         resetPaymentState()
         
-        // Step 1: Create Order
         processingState = .creatingOrder
         print("🛒 Starting order-based payment flow for amount: $\(amount)")
         
@@ -381,11 +385,9 @@ struct UpdatedCheckoutView: View {
                     return
                 }
                 
-                // Store order ID
                 self.orderId = createdOrderId
                 print("✅ Order created successfully: \(createdOrderId)")
                 
-                // Step 2: Process Payment with Order ID
                 self.processingState = .processingPayment
                 print("💳 Processing payment with order ID: \(createdOrderId)")
                 
@@ -397,13 +399,8 @@ struct UpdatedCheckoutView: View {
                         if success {
                             print("✅ Payment successful! Transaction ID: \(transactionId ?? "N/A")")
                             
-                            // Record donation
                             self.donationViewModel.recordDonation(amount: self.amount, transactionId: transactionId)
-                            
-                            // Store payment ID
                             self.paymentId = transactionId
-                            
-                            // Show success
                             self.processingState = .completed
                             self.showingThankYou = true
                         } else {
@@ -417,57 +414,42 @@ struct UpdatedCheckoutView: View {
         }
     }
     
-    /// Legacy: Direct payment processing flow (fallback)
     private func processDirectPayment() {
-        // Check if authenticated first
         if !squareAuthService.isAuthenticated {
             showingSquareAuth = true
             return
         }
         
-        // Check if reader connected
         if !paymentService.isReaderConnected {
             paymentService.paymentError = "Card reader not connected. Please contact staff."
             showingError = true
             return
         }
         
-        // Reset state
         resetPaymentState()
         
-        // Find catalog item ID if using preset amount
         var catalogItemId: String? = nil
         
         if !isCustomAmount {
-            // Try to find matching preset donation with catalog ID
             if let donation = kioskStore.presetDonations.first(where: { Double($0.amount) == amount }) {
                 catalogItemId = donation.catalogItemId
             }
         }
         
-        // Set state to processing payment
         processingState = .processingPayment
         
-        // Process the payment with catalog integration
         paymentService.processPayment(
             amount: amount,
             isCustomAmount: isCustomAmount,
             catalogItemId: catalogItemId
         ) { success, transactionId in
-            // Update UI based on result
             if success {
-                // Record donation
                 donationViewModel.recordDonation(amount: amount, transactionId: transactionId)
-                
-                // Store order ID for display
                 orderId = paymentService.currentOrderId
                 paymentId = transactionId
-                
-                // Show success
                 processingState = .completed
                 showingThankYou = true
             } else {
-                // The error will be displayed via the paymentError binding
                 processingState = .error
                 showingError = true
             }

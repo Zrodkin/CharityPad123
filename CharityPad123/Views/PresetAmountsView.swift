@@ -12,134 +12,107 @@ struct PresetAmountsView: View {
     @State private var isSaving = false
     @State private var showToast = false
     @State private var toastMessage = "Settings saved successfully"
-    @State private var showingAuthSheet = false
     @State private var showingAddAmountSheet = false
     @State private var newAmountString = ""
     
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 24) {
-                // Page header
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "dollarsign.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
-                        
-                        Text("Donation Amounts")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        
-                        Spacer()
-                        
-                        // Unsaved changes indicator
-                        if isDirty {
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(.orange)
-                                    .frame(width: 8, height: 8)
-                                
-                                Text("Unsaved Changes")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.orange)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule()
-                                    .fill(.orange.opacity(0.1))
-                            )
-                        }
-                    }
+        VStack(spacing: 0) {
+            // Header with save button
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Donation Amounts")
+                        .font(.title2)
+                        .fontWeight(.semibold)
                     
-                    Text("Configure preset amounts and custom donation limits")
+                    Text("Set preset amounts for quick selection")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
                 
-                // Square connection status
-                if !squareAuthService.isAuthenticated {
-                    ConnectionStatusCard(
-                        isConnected: false,
-                        onConnect: { showingAuthSheet = true }
-                    )
-                    .padding(.horizontal, 24)
-                } else {
-                    ConnectionStatusCard(
-                        isConnected: true,
-                        isSyncing: kioskStore.isSyncingWithCatalog,
-                        lastSyncTime: kioskStore.lastSyncTime,
-                        syncError: kioskStore.lastSyncError
-                    )
-                    .padding(.horizontal, 24)
+                Spacer()
+                
+                // Save button in header
+                Button(action: saveSettings) {
+                    HStack(spacing: 6) {
+                        if isSaving {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        
+                        Text(isSaving ? "Saving..." : "Save")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(isDirty ? Color.blue : Color(.systemGray4))
+                    .foregroundColor(isDirty ? .white : .secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                
-                // Main content
-                VStack(spacing: 20) {
-                    // Preset Amounts Card
-                    SettingsCard(title: "Preset Amounts", icon: "grid.circle.fill") {
-                        VStack(spacing: 24) {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Set up to 6 preset donation amounts for quick selection")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                
-                                if squareAuthService.isAuthenticated {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.green)
-                                            .font(.caption)
-                                        
-                                        Text("Amounts will sync with your Square catalog automatically")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
+                .disabled(!isDirty || isSaving)
+                .animation(.easeInOut(duration: 0.2), value: isDirty)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            
+            ScrollView {
+                LazyVStack(spacing: 24) {
+                    // Preset Amounts Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Quick Select Amounts")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        
+                        // Simple grid of amounts
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+                            ForEach(Array(kioskStore.presetDonations.enumerated()), id: \.offset) { index, donation in
+                                SimplePresetCard(
+                                    amount: donation.amount,
+                                    onAmountChange: { newAmount in
+                                        kioskStore.updatePresetDonation(at: index, amount: newAmount)
+                                        isDirty = true
+                                    },
+                                    onRemove: {
+                                        kioskStore.removePresetDonation(at: index)
+                                        isDirty = true
+                                    },
+                                    canRemove: kioskStore.presetDonations.count > 1
+                                )
                             }
                             
-                            // Preset amounts grid
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
-                                ForEach(Array(kioskStore.presetDonations.enumerated()), id: \.offset) { index, donation in
-                                    PresetAmountCard(
-                                        donation: donation,
-                                        index: index,
-                                        isAuthenticated: squareAuthService.isAuthenticated,
-                                        onAmountChange: { newAmount in
-                                            kioskStore.updatePresetDonation(at: index, amount: newAmount)
-                                            isDirty = true
-                                        },
-                                        onRemove: {
-                                            kioskStore.removePresetDonation(at: index)
-                                            isDirty = true
-                                        },
-                                        canRemove: kioskStore.presetDonations.count > 1
-                                    )
-                                }
-                                
-                                // Add new amount button
-                                if kioskStore.presetDonations.count < 6 {
-                                    AddAmountCard {
-                                        showingAddAmountSheet = true
-                                    }
+                            // Add button
+                            if kioskStore.presetDonations.count < 6 {
+                                AddAmountButton {
+                                    showingAddAmountSheet = true
                                 }
                             }
                         }
+                        
+                        Text("Tap any amount to edit it. You can have up to 6 preset amounts.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                    .padding(.horizontal, 24)
                     
-                    // Custom Amount Settings Card
-                    SettingsCard(title: "Custom Amount Settings", icon: "textfield.fill") {
-                        VStack(spacing: 24) {
-                            // Toggle for custom amounts
+                    // Custom Amount Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Custom Amount Option")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        
+                        VStack(spacing: 16) {
+                            // Toggle
                             HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Allow Custom Amounts")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Allow donors to enter custom amounts")
                                         .font(.subheadline)
-                                        .fontWeight(.medium)
                                     
-                                    Text("Let donors enter their own amount")
+                                    Text("Donors can type their own amount instead of using presets")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -152,26 +125,31 @@ struct PresetAmountsView: View {
                                         isDirty = true
                                     }
                             }
+                            .padding(16)
+                            .background(Color(.secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
                             
+                            // Min/Max settings (only if custom amounts enabled)
                             if allowCustomAmount {
-                                VStack(spacing: 16) {
-                                    Divider()
+                                VStack(spacing: 12) {
+                                    Text("Set limits for custom amounts")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     
-                                    // Min/Max amount settings
                                     HStack(spacing: 16) {
                                         VStack(alignment: .leading, spacing: 8) {
-                                            Text("Minimum Amount")
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
+                                            Text("Minimum")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
                                             
                                             HStack(spacing: 8) {
                                                 Text("$")
                                                     .foregroundStyle(.secondary)
-                                                    .font(.subheadline)
                                                 
                                                 TextField("1", text: $minAmount)
                                                     .keyboardType(.numberPad)
-                                                    .textFieldStyle(ModernTextFieldStyle())
+                                                    .textFieldStyle(CompactTextFieldStyle())
                                                     .onChange(of: minAmount) { _, _ in
                                                         isDirty = true
                                                     }
@@ -179,62 +157,31 @@ struct PresetAmountsView: View {
                                         }
                                         
                                         VStack(alignment: .leading, spacing: 8) {
-                                            Text("Maximum Amount")
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
+                                            Text("Maximum")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
                                             
                                             HStack(spacing: 8) {
                                                 Text("$")
                                                     .foregroundStyle(.secondary)
-                                                    .font(.subheadline)
                                                 
                                                 TextField("1000", text: $maxAmount)
                                                     .keyboardType(.numberPad)
-                                                    .textFieldStyle(ModernTextFieldStyle())
+                                                    .textFieldStyle(CompactTextFieldStyle())
                                                     .onChange(of: maxAmount) { _, _ in
                                                         isDirty = true
                                                     }
                                             }
                                         }
                                     }
-                                    
-                                    Text("These limits apply when donors choose to enter a custom amount")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
+                                .padding(16)
+                                .background(Color(.tertiarySystemBackground))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .transition(.opacity.combined(with: .move(edge: .top)))
                             }
                         }
                     }
-                }
-                .padding(.horizontal, 24)
-                
-                // Save button
-                if isDirty {
-                    Button(action: saveSettings) {
-                        HStack {
-                            if isSaving || kioskStore.isSyncingWithCatalog {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.9)
-                                
-                                Text(kioskStore.isSyncingWithCatalog ? "Syncing with Square..." : "Saving...")
-                            } else {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 16, weight: .semibold))
-                                
-                                Text("Save Changes")
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
-                    }
-                    .disabled(isSaving || kioskStore.isSyncingWithCatalog)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 24)
                 }
@@ -254,11 +201,8 @@ struct PresetAmountsView: View {
                 catalogService.fetchPresetDonations()
             }
         }
-        .sheet(isPresented: $showingAuthSheet) {
-            SquareAuthorizationView()
-        }
         .sheet(isPresented: $showingAddAmountSheet) {
-            AddAmountSheet(
+            CompactAddAmountSheet(
                 newAmountString: $newAmountString,
                 isPresented: $showingAddAmountSheet,
                 onAdd: { amount in
@@ -270,6 +214,7 @@ struct PresetAmountsView: View {
                     showToast = true
                 }
             )
+            .presentationDetents([.height(300)])
         }
         .overlay(alignment: .top) {
             if showToast {
@@ -285,7 +230,7 @@ struct PresetAmountsView: View {
         }
     }
     
-    // MARK: - Functions (unchanged functionality)
+    // MARK: - Functions
     
     func loadSettings() {
         allowCustomAmount = kioskStore.allowCustomAmount
@@ -309,298 +254,190 @@ struct PresetAmountsView: View {
             showToast = true
         }
     }
-    
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
-    }
 }
 
-// MARK: - Supporting Views
+// MARK: - Clean Supporting Views
 
-struct ConnectionStatusCard: View {
-    let isConnected: Bool
-    var isSyncing: Bool = false
-    var lastSyncTime: Date? = nil
-    var syncError: String? = nil
-    var onConnect: (() -> Void)? = nil
-    
-    var body: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(isConnected ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
-                    .frame(width: 40, height: 40)
-                
-                if isSyncing {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: isConnected ? .green : .red))
-                        .scaleEffect(0.8)
-                } else {
-                    Circle()
-                        .fill(isConnected ? Color.green : Color.red)
-                        .frame(width: 10, height: 10)
-                }
-            }
-            
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Square Integration")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    Spacer()
-                    
-                    if !isConnected {
-                        Button("Connect") {
-                            onConnect?()
-                        }
-                        .buttonStyle(SecondaryButtonStyle())
-                    }
-                }
-                
-                if isConnected {
-                    if isSyncing {
-                        Text("Syncing preset amounts...")
-                            .font(.caption)
-                            .foregroundStyle(.blue)
-                    } else if let error = syncError {
-                        Text("Sync error: \(error)")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    } else if let lastSync = lastSyncTime {
-                        Text("Last synced: \(formatDate(lastSync))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Connected and ready")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
-                } else {
-                    Text("Connect to Square to sync preset amounts with your catalog")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(20)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-    }
-    
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
-    }
-}
-
-struct PresetAmountCard: View {
-    let donation: PresetDonation
-    let index: Int
-    let isAuthenticated: Bool
+struct SimplePresetCard: View {
+    let amount: String
     let onAmountChange: (String) -> Void
     let onRemove: () -> Void
     let canRemove: Bool
     
-    @State private var amountText: String = ""
-    @State private var isEditing: Bool = false
+    @State private var isEditing = false
+    @State private var editAmount = ""
+    @FocusState private var isTextFieldFocused: Bool
     
     var body: some View {
-        VStack(spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text("$")
-                            .foregroundStyle(.secondary)
-                            .font(.subheadline)
-                        
-                        if isEditing {
-                            TextField("Amount", text: $amountText)
-                                .keyboardType(.numberPad)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .onSubmit {
-                                    submitAmount()
-                                }
-                        } else {
-                            Text(donation.amount)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .onTapGesture {
-                                    startEditing()
-                                }
-                        }
-                    }
+        VStack(spacing: 8) {
+            if isEditing {
+                HStack(spacing: 4) {
+                    Text("$")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
                     
-                    // Sync status indicator
-                    HStack(spacing: 6) {
-                        if isAuthenticated {
-                            Image(systemName: donation.isSync ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                                .font(.caption)
-                                .foregroundStyle(donation.isSync ? .green : .orange)
-                            
-                            Text(donation.isSync ? "Synced" : "Not synced")
-                                .font(.caption)
-                                .foregroundStyle(donation.isSync ? .green : .orange)
-                        } else {
-                            Text("Preset #\(index + 1)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    TextField("0", text: $editAmount)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .keyboardType(.numberPad)
+                        .focused($isTextFieldFocused)
+                        .multilineTextAlignment(.center)
+                        .onSubmit {
+                            finishEditing()
                         }
-                    }
                 }
-                
-                Spacer()
-                
-                if canRemove {
-                    Button(action: onRemove) {
-                        Image(systemName: "trash.fill")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .padding(8)
-                            .background(Color.red.opacity(0.1))
-                            .clipShape(Circle())
-                    }
+            } else {
+                Button(action: startEditing) {
+                    Text("$\(amount)")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
                 }
+                .buttonStyle(PlainButtonStyle())
+            }
+            
+            if canRemove && !isEditing {
+                Button(action: onRemove) {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(PlainButtonStyle())
             }
         }
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
+        .frame(minHeight: 80)
+        .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isEditing ? Color.blue : Color.clear, lineWidth: 2)
+        )
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         .onAppear {
-            amountText = donation.amount
+            editAmount = amount
         }
     }
     
     private func startEditing() {
-        amountText = donation.amount
+        editAmount = amount
         isEditing = true
+        isTextFieldFocused = true
     }
     
-    private func submitAmount() {
-        if !amountText.isEmpty, Double(amountText) != nil {
-            onAmountChange(amountText)
+    private func finishEditing() {
+        if let value = Double(editAmount), value > 0 {
+            onAmountChange(editAmount)
         } else {
-            amountText = donation.amount
+            editAmount = amount
         }
         isEditing = false
+        isTextFieldFocused = false
     }
 }
 
-struct AddAmountCard: View {
+struct AddAmountButton: View {
     let onAdd: () -> Void
     
     var body: some View {
         Button(action: onAdd) {
-            VStack(spacing: 12) {
-                Image(systemName: "plus.circle.fill")
+            VStack(spacing: 8) {
+                Image(systemName: "plus")
                     .font(.title2)
                     .foregroundStyle(.blue)
                 
-                Text("Add Amount")
-                    .font(.subheadline)
+                Text("Add")
+                    .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.blue)
             }
+            .frame(minHeight: 80)
             .frame(maxWidth: .infinity)
-            .padding(16)
-            .background(Color(.tertiarySystemBackground))
+            .padding(12)
+            .background(Color(.systemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.blue.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
+                    .stroke(Color.blue.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [6, 3]))
             )
+            .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         }
         .buttonStyle(PlainButtonStyle())
     }
 }
 
-struct AddAmountSheet: View {
+struct CompactAddAmountSheet: View {
     @Binding var newAmountString: String
     @Binding var isPresented: Bool
     let onAdd: (String) -> Void
     let onError: (String) -> Void
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 24) {
-                VStack(spacing: 16) {
-                    Text("Add Preset Amount")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    
-                    Text("Enter a donation amount that will appear as a quick-select option")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                
-                VStack(spacing: 16) {
-                    HStack(spacing: 12) {
-                        Text("$")
-                            .font(.title)
-                            .foregroundStyle(.secondary)
-                        
-                        TextField("0", text: $newAmountString)
-                            .font(.title)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.center)
-                            .textFieldStyle(ModernTextFieldStyle())
-                    }
-                    
-                    Text("Minimum $1 • Maximum $10,000")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        VStack(spacing: 20) {
+            // Header
+            HStack {
+                Text("Add Preset Amount")
+                    .font(.headline)
+                    .fontWeight(.semibold)
                 
                 Spacer()
                 
-                VStack(spacing: 12) {
-                    Button("Add Amount") {
-                        if let amount = Double(newAmountString), amount > 0 {
-                            onAdd(newAmountString)
-                            newAmountString = ""
-                            isPresented = false
-                        } else {
-                            onError("Please enter a valid amount")
-                        }
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(newAmountString.isEmpty || Double(newAmountString) == nil)
-                    
-                    Button("Cancel") {
-                        newAmountString = ""
-                        isPresented = false
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
+                Button("Cancel") {
+                    newAmountString = ""
+                    isPresented = false
+                }
+                .foregroundStyle(.secondary)
+            }
+            
+            // Amount input
+            HStack(spacing: 8) {
+                Text("$")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                
+                TextField("25", text: $newAmountString)
+                    .font(.title2)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(CompactTextFieldStyle())
+                    .multilineTextAlignment(.center)
+            }
+            
+            // Add button
+            Button("Add Amount") {
+                if let amount = Double(newAmountString), amount > 0 {
+                    onAdd(newAmountString)
+                    newAmountString = ""
+                    isPresented = false
+                } else {
+                    onError("Please enter a valid amount")
                 }
             }
-            .padding(24)
-            .navigationBarHidden(true)
-        }
-    }
-}
-
-// MARK: - Page-Specific Components
-
-struct PrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
             .font(.subheadline)
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(Color.blue)
-            .foregroundColor(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+            .padding(.vertical, 12)
+            .background(newAmountString.isEmpty || Double(newAmountString) == nil ? Color(.systemGray4) : Color.blue)
+            .foregroundColor(newAmountString.isEmpty || Double(newAmountString) == nil ? .secondary : .white)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .disabled(newAmountString.isEmpty || Double(newAmountString) == nil)
+            
+            Spacer()
+        }
+        .padding(24)
+        .background(Color(.systemBackground))
+    }
+}
+
+// MARK: - Text Field Style
+
+struct CompactTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(.tertiarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

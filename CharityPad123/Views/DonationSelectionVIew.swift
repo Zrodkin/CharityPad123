@@ -12,37 +12,41 @@ struct DonationSelectionView: View {
     
     var body: some View {
         ZStack {
-            // Background image
             backgroundImageView
             
-            // Dark overlay
             Color.black.opacity(0.55)
                 .edgesIgnoringSafeArea(.all)
             
-            VStack(spacing: 10) {
-                Text("Donation Amount")
-                    .font(.system(size: horizontalSizeClass == .regular ? 50 : 32, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.top, 170)
-                    .padding(.bottom, 30)
+            // CONSISTENT: Same layout structure as HomeView
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: KioskLayoutConstants.topContentOffset)
                 
-                VStack(spacing: 16) {
-                    // Grid layout for preset amounts - CLEAN, no status indicators
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
+                // Title
+                Text("Donation Amount")
+                    .font(.system(size: horizontalSizeClass == .regular ? KioskLayoutConstants.titleFontSize : KioskLayoutConstants.titleFontSizeCompact, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Spacer()
+                    .frame(height: KioskLayoutConstants.titleBottomSpacing)
+                
+                // Content area - buttons
+                VStack(spacing: KioskLayoutConstants.buttonSpacing) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: KioskLayoutConstants.buttonSpacing), count: 3), spacing: KioskLayoutConstants.buttonSpacing) {
                         ForEach(0..<kioskStore.presetDonations.count, id: \.self) { index in
                             presetAmountButton(for: index)
                         }
                     }
                     
-                    // Custom amount button
                     if kioskStore.allowCustomAmount {
                         customAmountButton
                     }
                 }
-                .frame(maxWidth: horizontalSizeClass == .regular ? 800 : 500)
-                .padding(.horizontal, 20)
+                .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
+                .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
                 
                 Spacer()
+                    .frame(height: KioskLayoutConstants.bottomSafeArea)
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -54,13 +58,11 @@ struct DonationSelectionView: View {
             }
             updateDonationViewModel()
         }
-        // Navigation to your beautiful custom amount view
         .navigationDestination(isPresented: $navigateToCustomAmount) {
             UpdatedCustomAmountView { amount in
                 handleCustomAmountSelection(amount: amount)
             }
         }
-        // Navigation to checkout
         .navigationDestination(isPresented: $navigateToCheckout) {
             UpdatedCheckoutView(
                 amount: donationViewModel.selectedAmount ?? 0,
@@ -97,14 +99,13 @@ struct DonationSelectionView: View {
             handleCustomAmountButtonPress()
         }) {
             Text("Custom")
-                .font(.system(size: horizontalSizeClass == .regular ? 24 : 20, weight: .semibold))
+                .font(.system(size: horizontalSizeClass == .regular ? KioskLayoutConstants.buttonFontSize : KioskLayoutConstants.buttonFontSizeCompact, weight: .semibold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: horizontalSizeClass == .regular ? 80 : 60)
+                .frame(height: horizontalSizeClass == .regular ? KioskLayoutConstants.buttonHeight : KioskLayoutConstants.buttonHeightCompact)
                 .background(Color.white.opacity(0.3))
                 .cornerRadius(15)
         }
-        .padding(.top, 10)
     }
     
     // MARK: - Helper Methods
@@ -119,12 +120,11 @@ struct DonationSelectionView: View {
                 RoundedRectangle(cornerRadius: 15)
                     .fill(Color.white.opacity(0.3))
                 
-                // CLEAN - just the amount, no status indicators
                 Text("$\(Int(amount))")
-                    .font(.system(size: horizontalSizeClass == .regular ? 24 : 20, weight: .semibold))
+                    .font(.system(size: horizontalSizeClass == .regular ? KioskLayoutConstants.buttonFontSize : KioskLayoutConstants.buttonFontSizeCompact, weight: .semibold))
                     .foregroundColor(.white)
             }
-            .frame(height: horizontalSizeClass == .regular ? 80 : 60)
+            .frame(height: horizontalSizeClass == .regular ? KioskLayoutConstants.buttonHeight : KioskLayoutConstants.buttonHeightCompact)
         }
         .frame(maxWidth: .infinity)
     }
