@@ -2,7 +2,6 @@ import SwiftUI
 
 struct AdminDashboardView: View {
     @State private var selectedTab: String? = "home"
-    // @State private var showingKiosk = false // This state variable seems unused
     @State private var showLogoutAlert = false
     @State private var isLoggingOut = false
     @AppStorage("isInAdminMode") private var isInAdminMode: Bool = true
@@ -15,181 +14,280 @@ struct AdminDashboardView: View {
     
     var body: some View {
         NavigationSplitView {
-            // Sidebar
-            VStack {
-                List(selection: $selectedTab) {
-                    Text(organizationStore.name)
-                        .font(.headline)
-                        .padding(.vertical, 8)
-                        .tag(nil as String?) // Allows no selection text to show initially if selectedTab is nil
-                    
-                    NavigationLink(value: "home") {
-                        Label("Home Page", systemImage: "house")
-                    }
-                    
-                    NavigationLink(value: "presetAmounts") {
-                        Label("Preset Amounts", systemImage: "dollarsign.circle")
-                    }
-                    
-                    NavigationLink(value: "receipts") {
-                        Label("Email Receipts", systemImage: "envelope")
-                    }
-                    
-                    NavigationLink(value: "timeout") {
-                        Label("Timeout Settings", systemImage: "clock")
-                    }
-                    
-                    NavigationLink(value: "readers") {
-                        Label("Card Readers", systemImage: "creditcard.wireless")
-                    }
-                    
-                    Spacer()
-                        .frame(height: 20)
-                        .tag(nil as String?) // Needs a unique tag if it's selectable, or make it non-selectable
-                    
-                    Button(action: {
-                        showLogoutAlert = true
-                    }) {
-                        Label("Logout", systemImage: "arrow.right.square")
-                            .foregroundColor(.red)
-                    }
-                    .tag(nil as String?) // Needs a unique tag or handle selection appropriately
-                }
-                .listStyle(SidebarListStyle())
-                
-                // Square connection status
-                VStack(alignment: .leading, spacing: 5) {
+            // Clean sidebar with modern styling
+            VStack(spacing: 0) {
+                // Organization header
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Circle()
-                            .fill(squareAuthService.isAuthenticated ? Color.green : Color.red)
-                            .frame(width: 10, height: 10)
+                        // Organization logo or icon
+                        ZStack {
+                            Circle()
+                                .fill(LinearGradient(
+                                    colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.6)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ))
+                                .frame(width: 48, height: 48)
+                            
+                            Text(String(organizationStore.name.prefix(1).uppercased()))
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                        }
                         
-                        Text(squareAuthService.isAuthenticated ? "Connected to Square" : "Not connected to Square")
-                            .font(.caption)
-                            .foregroundColor(squareAuthService.isAuthenticated ? .green : .red)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(organizationStore.name)
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            
+                            Text("Admin Dashboard")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Spacer()
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 24)
+                .background(Color(.systemBackground))
+                
+                // Navigation list
+                List(selection: $selectedTab) {
+                    Section {
+                        NavigationLink(value: "home") {
+                            AdminNavItem(
+                                icon: "house.fill",
+                                title: "Home Page",
+                                subtitle: "Customize appearance"
+                            )
+                        }
+                        
+                        NavigationLink(value: "presetAmounts") {
+                            AdminNavItem(
+                                icon: "dollarsign.circle.fill",
+                                title: "Donation Amounts",
+                                subtitle: "Set preset values"
+                            )
+                        }
+                        
+                        NavigationLink(value: "receipts") {
+                            AdminNavItem(
+                                icon: "envelope.fill",
+                                title: "Email Receipts",
+                                subtitle: "Organization details"
+                            )
+                        }
+                        
+                        NavigationLink(value: "timeout") {
+                            AdminNavItem(
+                                icon: "clock.fill",
+                                title: "Timeout Settings",
+                                subtitle: "Auto-reset duration"
+                            )
+                        }
+                        
+                        NavigationLink(value: "readers") {
+                            AdminNavItem(
+                                icon: "creditcard.wireless.fill",
+                                title: "Card Readers",
+                                subtitle: "Hardware management"
+                            )
+                        }
+                    }
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    .listRowSeparator(.hidden)
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                
+                Spacer()
+                
+                // Connection status section
+                VStack(spacing: 16) {
+                    // Square connection status
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(squareAuthService.isAuthenticated ?
+                                      Color.green.opacity(0.15) : Color.red.opacity(0.15))
+                                .frame(width: 32, height: 32)
+                            
+                            Circle()
+                                .fill(squareAuthService.isAuthenticated ? Color.green : Color.red)
+                                .frame(width: 8, height: 8)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Square Integration")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            
+                            Text(squareAuthService.isAuthenticated ? "Connected" : "Disconnected")
+                                .font(.caption)
+                                .foregroundStyle(squareAuthService.isAuthenticated ? .green : .red)
+                        }
+                        
+                        Spacer()
                     }
                     
+                    // Reader status (only if Square is connected)
                     if squareAuthService.isAuthenticated {
-                        HStack {
-                            Circle()
-                                .fill(squarePaymentService.isReaderConnected ? Color.green : Color.orange)
-                                .frame(width: 10, height: 10)
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(squarePaymentService.isReaderConnected ?
+                                          Color.green.opacity(0.15) : Color.orange.opacity(0.15))
+                                    .frame(width: 32, height: 32)
+                                
+                                Image(systemName: "creditcard.wireless.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(squarePaymentService.isReaderConnected ? .green : .orange)
+                            }
                             
-                            Text(squarePaymentService.connectionStatus)
-                                .font(.caption)
-                                .foregroundColor(squarePaymentService.isReaderConnected ? .green : .orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Card Reader")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                
+                                Text(squarePaymentService.connectionStatus)
+                                    .font(.caption)
+                                    .foregroundStyle(squarePaymentService.isReaderConnected ? .green : .orange)
+                                    .lineLimit(1)
+                            }
+                            
+                            Spacer()
                         }
                     }
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.secondarySystemBackground))
+                )
+                .padding(.horizontal, 16)
                 
-                // Launch Kiosk Button
-                Button(action: {
-                    kioskStore.updateDonationViewModel(donationViewModel)
-                    isInAdminMode = false
-                }) {
-                    Label("Launch Kiosk", systemImage: "play.circle")
-                        .foregroundColor(.green)
+                // Action buttons
+                VStack(spacing: 12) {
+                    // Launch Kiosk button
+                    Button(action: {
+                        kioskStore.updateDonationViewModel(donationViewModel)
+                        isInAdminMode = false
+                    }) {
+                        HStack {
+                            Image(systemName: "play.circle.fill")
+                                .font(.title3)
+                            
+                            Text("Launch Kiosk")
+                                .fontWeight(.semibold)
+                        }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.green, Color.green.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .disabled(!squareAuthService.isAuthenticated)
+                    .opacity(squareAuthService.isAuthenticated ? 1.0 : 0.5)
+                    
+                    // Logout button
+                    Button(action: {
+                        showLogoutAlert = true
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.right.square.fill")
+                                .font(.title3)
+                            
+                            Text("Logout")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color(.tertiarySystemBackground))
+                        .foregroundStyle(.red)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
                 }
-                .padding(.horizontal)
-                .background(Color.white.opacity(0.1))
-                .disabled(!squareAuthService.isAuthenticated)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
             }
-            .navigationTitle("Admin Dashboard")
-            .onChange(of: squareAuthService.isAuthenticated) { newIsAuthenticatedValue in // Use new value
-                if newIsAuthenticatedValue {
-                    squarePaymentService.initializeSDK()
-                }
-            }
-            .onAppear {
-                // MODIFICATION: Temporarily disable reader service monitoring for diagnostics
-                // DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
-                //     if self.isInAdminMode {
-                //         // squareReaderService.startMonitoring() // COMMENT OUT
-                //     }
-                // }
-                print("AdminDashboardView: Reader monitoring TEMPORARILY DISABLED for diagnostics.")
-
-                if squareAuthService.isAuthenticated {
-                    squarePaymentService.initializeSDK()
-                }
-            }
-            .onDisappear {
-                // squareReaderService.stopMonitoring() // COMMENT OUT
-            }
-
+            .background(Color(.systemGroupedBackground))
+            .navigationBarHidden(true)
+            
         } detail: {
-            // Detail content based on selection
-            if let selectedTab = selectedTab {
-                switch selectedTab {
-                case "home":
-                    HomePageSettingsView().environmentObject(kioskStore)
-                case "presetAmounts":
-                    PresetAmountsView().environmentObject(kioskStore)
-                case "receipts":
-                    EmailReceiptsView().environmentObject(organizationStore)
-                case "timeout":
-                    TimeoutSettingsView().environmentObject(kioskStore)
-                case "readers":
-                    ReaderManagementView()
-                        .environmentObject(squareAuthService)
-                        .environmentObject(squareReaderService)
-                default:
-                    Text("Select an option from the sidebar")
-                        .font(.title).foregroundColor(.gray)
+            // Clean detail view
+            Group {
+                if let selectedTab = selectedTab {
+                    switch selectedTab {
+                    case "home":
+                        HomePageSettingsView().environmentObject(kioskStore)
+                    case "presetAmounts":
+                        PresetAmountsView().environmentObject(kioskStore)
+                    case "receipts":
+                        EmailReceiptsView().environmentObject(organizationStore)
+                    case "timeout":
+                        TimeoutSettingsView().environmentObject(kioskStore)
+                    case "readers":
+                        ReaderManagementView()
+                            .environmentObject(squareAuthService)
+                            .environmentObject(squareReaderService)
+                    default:
+                        EmptyDetailView()
+                    }
+                } else {
+                    EmptyDetailView()
                 }
-            } else {
-                Text("Select an option from the sidebar") // Default view when no tab is selected
-                    .font(.title).foregroundColor(.gray)
             }
+            .background(Color(.systemGroupedBackground))
         }
         .alert(isPresented: $showLogoutAlert) {
             Alert(
-                title: Text("Are you sure you want to logout?"),
-                message: Text("You will need to log back in to access the admin panel."),
+                title: Text("Logout"),
+                message: Text("Are you sure you want to logout? You will need to authenticate again to access the admin panel."),
                 primaryButton: .destructive(Text("Logout")) {
-                    showLogoutAlert = false // Dismiss alert first
-                    // Increased delay to ensure alert dismissal before starting heavy logout ops
+                    showLogoutAlert = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         initiateLogoutProcess()
                     }
                 },
-                secondaryButton: .cancel() {
-                    showLogoutAlert = false
-                }
+                secondaryButton: .cancel()
             )
         }
         .overlay(
             Group {
                 if isLoggingOut {
-                    ZStack {
-                        Color.black.opacity(0.6).edgesIgnoringSafeArea(.all)
-                        VStack(spacing: 16) {
-                            ProgressView().scaleEffect(1.5).padding()
-                            Text("Logging out...").font(.headline).foregroundColor(.white).padding(.bottom, 4)
-                            Text("Please wait while we clean up your session").font(.caption).foregroundColor(.white.opacity(0.8))
-                        }
-                        .padding(24).background(Color(.systemBackground).opacity(0.9)).cornerRadius(16).shadow(radius: 10)
-                    }
-                    .transition(.opacity).animation(.easeInOut, value: isLoggingOut)
+                    LogoutOverlay()
                 }
             }
         )
+        .onChange(of: squareAuthService.isAuthenticated) { newValue in
+            if newValue {
+                squarePaymentService.initializeSDK()
+            }
+        }
+        .onAppear {
+            if squareAuthService.isAuthenticated {
+                squarePaymentService.initializeSDK()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .squareAuthenticationStatusChanged)) { _ in
-            print("AdminDashboardView: Received .squareAuthenticationStatusChanged notification")
-            // Potentially refresh parts of the UI if needed, but avoid causing re-render loops.
+            // Handle authentication status changes
         }
     }
     
-    // MARK: - Refactored Logout Methods
+    // MARK: - Logout Methods (unchanged functionality)
     
     private func initiateLogoutProcess() {
-        isLoggingOut = true // Show "Logging out..." overlay
-
-        // Step 1: Deauthorize Square SDK (if currently authenticated)
+        isLoggingOut = true
+        
         if squareAuthService.isAuthenticated {
             print("Logout: Deauthorizing Square SDK...")
             squarePaymentService.deauthorizeSDK {
@@ -203,56 +301,130 @@ struct AdminDashboardView: View {
     }
     
     private func attemptServerDisconnect() {
-        // Step 2: Attempt to disconnect from your backend server
         print("Logout: Attempting to disconnect from server...")
         squareAuthService.disconnectFromServer { serverDisconnectSuccess in
             print("Logout: Server disconnect attempt finished (success: \(serverDisconnectSuccess)).")
-            // Regardless of server disconnect success, proceed with client-side cleanup.
             self.finalizeClientSideLogout()
         }
     }
     
     private func finalizeClientSideLogout() {
         print("Logout: Finalizing client-side logout...")
-        // Step 3: Stop other services like reader monitoring
         squareReaderService.stopMonitoring()
-        
-        // Step 4: Reset local view models and non-auth related state
         donationViewModel.resetDonation()
-        
-        // Step 5: Clear all local Square authentication data.
-        // This will set squareAuthService.isAuthenticated to false,
-        // which should trigger UI updates in ContentView via @AppStorage and @EnvironmentObject.
         squareAuthService.clearLocalAuthData()
-        print("Logout: Local auth data cleared. isAuthenticated should be false.")
-
-        // Step 6: Perform final UI state transitions to navigate to Onboarding
-        // A short delay can help ensure that state changes from clearLocalAuthData propagate
-        // before these final @AppStorage changes take full effect for ContentView.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { // Minimal delay for state propagation
-            self.isInAdminMode = true // Ensure this is set correctly for ContentView logic
-            UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding") // Key trigger for ContentView
-            
-            // Hide the "Logging out..." overlay
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.isInAdminMode = true
+            UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
             self.isLoggingOut = false
             print("Logout: Process complete. Should navigate to Onboarding.")
-
-            // Consider removing ForceViewRefresh if @AppStorage and @EnvironmentObject changes
-            // are reliably updating ContentView. If not, it can be a fallback.
-            // NotificationCenter.default.post(name: NSNotification.Name("ForceViewRefresh"), object: nil)
         }
     }
 }
 
-// Preview remains the same
+// MARK: - Supporting Views
+
+struct AdminNavItem: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.blue.opacity(0.1))
+                    .frame(width: 40, height: 40)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.blue)
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+struct EmptyDetailView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(.tertiary)
+            
+            Text("Select a setting")
+                .font(.title2)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
+            
+            Text("Choose an option from the sidebar to get started")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground))
+    }
+}
+
+struct LogoutOverlay: View {
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 20) {
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                
+                VStack(spacing: 8) {
+                    Text("Logging out...")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                    
+                    Text("Cleaning up your session")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            }
+            .padding(32)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+            )
+            .shadow(radius: 20)
+        }
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.3), value: true)
+    }
+}
+
+// Preview
 struct AdminDashboardView_Previews: PreviewProvider {
     static var previews: some View {
         let authService = SquareAuthService()
         let catalogService = SquareCatalogService(authService: authService)
         let paymentService = SquarePaymentService(authService: authService, catalogService: catalogService)
         let readerService = SquareReaderService(authService: authService)
-        // Crucial: Connect readerService to paymentService (if this pattern is used in your app setup)
-        // paymentService.setReaderService(readerService) // Assuming paymentService has such a method
 
         return AdminDashboardView()
             .environmentObject(OrganizationStore())

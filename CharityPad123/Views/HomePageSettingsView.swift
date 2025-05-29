@@ -14,310 +14,326 @@ struct HomePageSettingsView: View {
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Enable/disable toggle
-                HStack {
-                    Spacer()
-                    
-                    Toggle("Home page is enabled", isOn: $homePageEnabled)
-                        .padding()
-                        .background(Color.white.opacity(0.85))
-                        .cornerRadius(15)
-                        .onChange(of: homePageEnabled) { _, _ in
-                            isDirty = true
-                        }
-                }
-                
-                // Two column layout for iPad
-                HStack(alignment: .top, spacing: 20) {
-                    // Left column - Background Image
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("Background Image")
+            LazyVStack(spacing: 24) {
+                // Page header
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "house.fill")
                             .font(.title2)
-                            .fontWeight(.bold)
+                            .foregroundStyle(.blue)
                         
-                        Text("Upload a background image for your donation kiosk home page.")
-                            .foregroundColor(.gray)
+                        Text("Home Page Settings")
+                            .font(.title2)
+                            .fontWeight(.semibold)
                         
-                        // Logo upload
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Organization Logo")
-                                .font(.headline)
-                            
-                            HStack {
-                                // Logo preview
-                                ZStack {
-                                    Rectangle()
-                                        .fill(Color.gray.opacity(0.2))
-                                        .frame(width: 100, height: 100)
-                                        .cornerRadius(8)
-                                    
-                                    if let logoImage = kioskStore.logoImage {
-                                        Image(uiImage: logoImage)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 90, height: 90)
-                                    } else {
-                                        Image(systemName: "arrow.up.square")
-                                            .font(.system(size: 30))
-                                            .foregroundColor(.gray)
-                                    }
-                                }
-                                
-                                VStack(alignment: .leading) {
-                                    Button("Upload Logo") {
-                                        showingLogoImagePicker = true
-                                    }
-                                    .buttonStyle(.bordered)
-                                    
-                                    if kioskStore.logoImage != nil {
-                                        Button("Remove") {
-                                            kioskStore.logoImage = nil
-                                            isDirty = true
-                                            // Save immediately to ensure persistence
-                                            kioskStore.saveSettings()
-                                        }
-                                        .foregroundColor(.red)
-                                    }
-                                    
-                                    Text("Recommended size: 200x200px")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                }
-                            }
-                        }
-                        .padding()
-                        .background(Color.white.opacity(0.85))
-                        .cornerRadius(15)
+                        Spacer()
                         
-                        // Background image upload
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Background Image")
-                                .font(.headline)
-                            
-                            if let backgroundImage = kioskStore.backgroundImage {
-                                ZStack {
-                                    Image(uiImage: backgroundImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(height: 200)
-                                        .clipped()
-                                        .cornerRadius(8)
-                                    
-                                    // Overlay with text preview
-                                    VStack {
-                                        Text(headline)
-                                            .font(.title)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
-                                        
-                                        Text(subtext)
-                                            .foregroundColor(.white)
-                                    }
-                                    .padding()
-                                    .background(Color.black.opacity(0.3))
-                                    .cornerRadius(8)
-                                }
-                            } else {
-                                ZStack {
-                                    Rectangle()
-                                        .fill(Color.gray.opacity(0.2))
-                                        .frame(height: 200)
-                                        .cornerRadius(8)
-                                    
-                                    VStack {
-                                        Image(systemName: "arrow.up.square")
-                                            .font(.system(size: 40))
-                                            .foregroundColor(.gray)
-                                        
-                                        Text("Upload a background image")
-                                            .foregroundColor(.gray)
-                                    }
-                                }
+                        // Enable/disable toggle
+                        Toggle("Enabled", isOn: $homePageEnabled)
+                            .toggleStyle(SwitchToggleStyle(tint: .blue))
+                            .onChange(of: homePageEnabled) { _, _ in
+                                isDirty = true
                             }
-                            
-                            HStack {
-                                Button("Upload Background") {
-                                    showingBackgroundImagePicker = true
-                                }
-                                .buttonStyle(.bordered)
-                                
-                                if kioskStore.backgroundImage != nil {
-                                    Button("Remove") {
-                                        kioskStore.backgroundImage = nil
-                                        isDirty = true
-                                    }
-                                    .foregroundColor(.red)
-                                }
-                            }
-                            
-                            Text("Recommended size: 1920x1080px. A dark overlay will be applied automatically.")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                        .padding()
-                        .background(Color.white.opacity(0.85))
-                        .cornerRadius(15)
                     }
                     
-                    // Right column - Text Content
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("Text Content")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        
-                        Text("Set the headline and subtext that appears on your donation kiosk home page.")
-                            .foregroundColor(.gray)
-                        
-                        VStack(alignment: .leading, spacing: 20) {
-                            // Headline
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("Headline")
-                                    .font(.headline)
+                    Text("Customize the appearance of your donation kiosk home screen")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                
+                // Main content in cards
+                VStack(spacing: 20) {
+                    // Visual Assets Card
+                    SettingsCard(title: "Visual Assets", icon: "photo.fill") {
+                        VStack(spacing: 24) {
+                            // Organization Logo Section
+                            VStack(alignment: .leading, spacing: 16) {
+                                SectionHeader(title: "Organization Logo", subtitle: "Displayed prominently on your kiosk")
                                 
-                                TextField("Tap to Donate", text: $headline)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                HStack(spacing: 16) {
+                                    // Logo preview
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .fill(Color(.secondarySystemBackground))
+                                            .frame(width: 100, height: 100)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 16)
+                                                    .stroke(Color(.separator), lineWidth: 1)
+                                            )
+                                        
+                                        if let logoImage = kioskStore.logoImage {
+                                            Image(uiImage: logoImage)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 90, height: 90)
+                                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        } else {
+                                            VStack(spacing: 8) {
+                                                Image(systemName: "photo")
+                                                    .font(.title2)
+                                                    .foregroundStyle(.tertiary)
+                                                
+                                                Text("No Logo")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.tertiary)
+                                            }
+                                        }
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        Button("Upload Logo") {
+                                            showingLogoImagePicker = true
+                                        }
+                                        .buttonStyle(SecondaryButtonStyle())
+                                        
+                                        if kioskStore.logoImage != nil {
+                                            Button("Remove") {
+                                                kioskStore.logoImage = nil
+                                                isDirty = true
+                                                kioskStore.saveSettings()
+                                            }
+                                            .buttonStyle(DestructiveButtonStyle())
+                                        }
+                                        
+                                        Text("Recommended: 200×200px PNG or JPG")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    
+                                    Spacer()
+                                }
+                            }
+                            
+                            Divider()
+                            
+                            // Background Image Section
+                            VStack(alignment: .leading, spacing: 16) {
+                                SectionHeader(title: "Background Image", subtitle: "Sets the mood for your donation experience")
+                                
+                                VStack(spacing: 16) {
+                                    // Background preview with text overlay
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .fill(Color(.secondarySystemBackground))
+                                            .frame(height: 200)
+                                        
+                                        if let backgroundImage = kioskStore.backgroundImage {
+                                            Image(uiImage: backgroundImage)
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(height: 200)
+                                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                        } else {
+                                            VStack(spacing: 12) {
+                                                Image(systemName: "photo.on.rectangle")
+                                                    .font(.system(size: 40))
+                                                    .foregroundStyle(.tertiary)
+                                                
+                                                Text("No Background Image")
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(.tertiary)
+                                            }
+                                        }
+                                        
+                                        // Text preview overlay (only if background exists)
+                                        if kioskStore.backgroundImage != nil {
+                                            Rectangle()
+                                                .fill(.black.opacity(0.4))
+                                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                            
+                                            VStack(spacing: 8) {
+                                                Text(headline.isEmpty ? "Sample Title" : headline)
+                                                    .font(.title)
+                                                    .fontWeight(.bold)
+                                                    .foregroundColor(.white)
+                                                
+                                                if !subtext.isEmpty {
+                                                    Text(subtext)
+                                                        .font(.subheadline)
+                                                        .foregroundColor(.white.opacity(0.9))
+                                                        .multilineTextAlignment(.center)
+                                                }
+                                            }
+                                            .padding()
+                                        }
+                                    }
+                                    
+                                    HStack(spacing: 12) {
+                                        Button("Upload Background") {
+                                            showingBackgroundImagePicker = true
+                                        }
+                                        .buttonStyle(SecondaryButtonStyle())
+                                        
+                                        if kioskStore.backgroundImage != nil {
+                                            Button("Remove") {
+                                                kioskStore.backgroundImage = nil
+                                                isDirty = true
+                                            }
+                                            .buttonStyle(DestructiveButtonStyle())
+                                        }
+                                        
+                                        Spacer()
+                                    }
+                                    
+                                    Text("Recommended: 1920×1080px for best quality. A dark overlay will be applied automatically.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Text Content Card
+                    SettingsCard(title: "Text Content", icon: "textformat") {
+                        VStack(spacing: 24) {
+                            // Headline Section
+                            VStack(alignment: .leading, spacing: 12) {
+                                SectionHeader(title: "Main Headline", subtitle: "Primary text displayed on the home screen")
+                                
+                                TextField("Enter headline", text: $headline)
+                                    .textFieldStyle(ModernTextFieldStyle())
                                     .onChange(of: headline) { _, _ in
                                         isDirty = true
                                     }
-                                
-                                Text("This is the main text displayed on the home screen.")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
                             }
                             
-                            // Subtext
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("Subtext")
-                                    .font(.headline)
+                            // Subtext Section
+                            VStack(alignment: .leading, spacing: 12) {
+                                SectionHeader(title: "Supporting Text", subtitle: "Additional context or call-to-action")
                                 
-                                TextEditor(text: $subtext)
-                                    .frame(height: 100)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                                    )
-                                    .onChange(of: subtext) { _, _ in
-                                        isDirty = true
+                                ZStack(alignment: .topLeading) {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color(.secondarySystemBackground))
+                                        .frame(minHeight: 100)
+                                    
+                                    TextEditor(text: $subtext)
+                                        .padding(12)
+                                        .background(Color.clear)
+                                        .onChange(of: subtext) { _, _ in
+                                            isDirty = true
+                                        }
+                                    
+                                    if subtext.isEmpty {
+                                        Text("Enter supporting text...")
+                                            .foregroundStyle(.tertiary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 20)
+                                            .allowsHitTesting(false)
                                     }
-                                
-                                Text("Additional text displayed below the headline.")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                }
                             }
                             
-                            // Preview
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("Preview")
-                                    .font(.headline)
+                            // Live Preview
+                            VStack(alignment: .leading, spacing: 12) {
+                                SectionHeader(title: "Preview", subtitle: "How your text will appear")
                                 
-                                VStack {
-                                    Text(headline)
+                                VStack(spacing: 12) {
+                                    Text(headline.isEmpty ? "Your Headline Here" : headline)
                                         .font(.title2)
                                         .fontWeight(.bold)
+                                        .foregroundStyle(.primary)
+                                        .multilineTextAlignment(.center)
                                     
-                                    Text(subtext)
-                                        .foregroundColor(.gray)
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(8)
-                            }
-                            
-                            // Save button
-                            HStack {
-                                Spacer()
-                                
-                                Button(action: saveSettings) {
-                                    HStack {
-                                        if isSaving {
-                                            ProgressView()
-                                                .progressViewStyle(CircularProgressViewStyle())
-                                                .padding(.trailing, 5)
-                                            Text("Saving...")
-                                        } else {
-                                            Image(systemName: "square.and.arrow.down")
-                                                .padding(.trailing, 5)
-                                            Text("Save Changes")
-                                        }
+                                    if !subtext.isEmpty {
+                                        Text(subtext)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .multilineTextAlignment(.center)
+                                    } else {
+                                        Text("Your supporting text will appear here")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.tertiary)
+                                            .italic()
                                     }
-                                    .padding()
-                                    .background(isDirty ? Color.blue : Color.gray)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(8)
                                 }
-                                .disabled(!isDirty || isSaving)
+                                .frame(maxWidth: .infinity)
+                                .padding(20)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color(.tertiarySystemBackground))
+                                )
                             }
                         }
-                        .padding()
-                        .background(Color.white.opacity(0.85))
-                        .cornerRadius(15)
                     }
                 }
-            }
-            .padding()
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(red: 0.55, green: 0.47, blue: 0.84),
-                        Color(red: 0.56, green: 0.71, blue: 1.0),
-                        Color(red: 0.97, green: 0.76, blue: 0.63),
-                        Color(red: 0.97, green: 0.42, blue: 0.42)
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-            )
-            .onAppear {
-                headline = kioskStore.headline
-                subtext = kioskStore.subtext
-                homePageEnabled = kioskStore.homePageEnabled
-            }
-            .sheet(isPresented: $showingLogoImagePicker) {
-                ImagePicker(selectedImage: $kioskStore.logoImage, isPresented: $showingLogoImagePicker)
-                    .onDisappear {
-                        if kioskStore.logoImage != nil {
-                            isDirty = true
-                        }
-                    }
-            }
-            .sheet(isPresented: $showingBackgroundImagePicker) {
-                ImagePicker(selectedImage: $kioskStore.backgroundImage, isPresented: $showingBackgroundImagePicker)
-                    .onDisappear {
-                        if kioskStore.backgroundImage != nil {
-                            isDirty = true
-                        }
-                    }
-            }
-            .overlay(
-                Group {
-                    if showToast {
-                        ToastView(message: "Settings saved successfully")
-                            .transition(.move(edge: .top))
-                            .animation(.spring(), value: showToast)
-                            .onAppear {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                    showToast = false
-                                }
+                .padding(.horizontal, 24)
+                
+                // Save button
+                if isDirty {
+                    Button(action: saveSettings) {
+                        HStack {
+                            if isSaving {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.9)
+                                
+                                Text("Saving...")
+                            } else {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 16, weight: .semibold))
+                                
+                                Text("Save Changes")
                             }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                    }
+                    .disabled(isSaving)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .background(Color(.systemGroupedBackground))
+        .onAppear {
+            headline = kioskStore.headline
+            subtext = kioskStore.subtext
+            homePageEnabled = kioskStore.homePageEnabled
+        }
+        .sheet(isPresented: $showingLogoImagePicker) {
+            ImagePicker(selectedImage: $kioskStore.logoImage, isPresented: $showingLogoImagePicker)
+                .onDisappear {
+                    if kioskStore.logoImage != nil {
+                        isDirty = true
                     }
                 }
-            )
-            .navigationTitle("Home Page")
+        }
+        .sheet(isPresented: $showingBackgroundImagePicker) {
+            ImagePicker(selectedImage: $kioskStore.backgroundImage, isPresented: $showingBackgroundImagePicker)
+                .onDisappear {
+                    if kioskStore.backgroundImage != nil {
+                        isDirty = true
+                    }
+                }
+        }
+        .overlay(alignment: .top) {
+            if showToast {
+                ToastNotification(message: "Settings saved successfully")
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showToast)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            showToast = false
+                        }
+                    }
+            }
         }
     }
     
     func saveSettings() {
         isSaving = true
         
-        // Update the store
         kioskStore.headline = headline
         kioskStore.subtext = subtext
         kioskStore.homePageEnabled = homePageEnabled
         
-        // Simulate network delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             kioskStore.saveSettings()
             isSaving = false
@@ -327,6 +343,129 @@ struct HomePageSettingsView: View {
     }
 }
 
+// MARK: - Supporting Views
+
+struct SettingsCard<Content: View>: View {
+    let title: String
+    let icon: String
+    let content: Content
+    
+    init(title: String, icon: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.blue.opacity(0.1))
+                        .frame(width: 32, height: 32)
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.blue)
+                }
+                
+                Text(title)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+            }
+            
+            content
+        }
+        .padding(24)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+    }
+}
+
+struct SectionHeader: View {
+    let title: String
+    let subtitle: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct ModernTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(12)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+struct SecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline)
+            .fontWeight(.medium)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color(.secondarySystemBackground))
+            .foregroundStyle(.primary)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+struct DestructiveButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline)
+            .fontWeight(.medium)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.red.opacity(0.1))
+            .foregroundStyle(.red)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+struct ToastNotification: View {
+    let message: String
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            
+            Text(message)
+                .font(.subheadline)
+                .fontWeight(.medium)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+        .padding(.top, 60)
+    }
+}
+
+// Keep existing ImagePicker implementation
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var selectedImage: UIImage?
     @Binding var isPresented: Bool
@@ -367,19 +506,6 @@ struct ImagePicker: UIViewControllerRepresentable {
                 }
             }
         }
-    }
-}
-
-struct ToastView: View {
-    let message: String
-    
-    var body: some View {
-        Text(message)
-            .padding()
-            .background(Color.black.opacity(0.7))
-            .foregroundColor(.white)
-            .cornerRadius(10)
-            .padding(.top, 20)
     }
 }
 
