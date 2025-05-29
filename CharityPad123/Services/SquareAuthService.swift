@@ -571,7 +571,6 @@ class SquareAuthService: ObservableObject {
     
     /// Disconnect from the server by calling the disconnect endpoint
     func disconnectFromServer(completion: @escaping (Bool) -> Void) {
-        // Construct URL for the disconnect endpoint
         guard let url = URL(string: "\(SquareConfig.backendBaseURL)\(SquareConfig.disconnectEndpoint)") else {
             print("Invalid disconnect URL")
             completion(false)
@@ -582,52 +581,36 @@ class SquareAuthService: ObservableObject {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // Create request body
-        let body: [String: Any] = ["organization_id": organizationId]
+        let body: [String: Any] = ["organization_id": organizationId] // Ensure organizationId is correctly sourced
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         } catch {
-            print("Failed to serialize request: \(error.localizedDescription)")
+            print("Failed to serialize disconnect request: \(error.localizedDescription)")
             completion(false)
             return
         }
         
-        // Make the request to the server to revoke tokens and clean up server-side
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        URLSession.shared.dataTask(with: request) { data, response, error in
             DispatchQueue.main.async {
                 if let error = error {
                     print("Network error during server disconnect: \(error.localizedDescription)")
-                    completion(false)
+                    completion(false) // Server disconnect failed due to network error
                     return
                 }
                 
                 if let httpResponse = response as? HTTPURLResponse {
-                    print("Server disconnect status code: \(httpResponse.statusCode)")
-                }
-                
-                // Print response for debugging
-                if let data = data, let responseString = String(data: data, encoding: .utf8) {
-                    print("Server disconnect response: \(responseString)")
-                }
-                
-                if let httpResponse = response as? HTTPURLResponse,
-                   httpResponse.statusCode >= 200 && httpResponse.statusCode < 300 {
-                    // Server disconnection was successful
-                    print("Successfully disconnected from server")
-                    
-                    // Clear all local tokens
-                    self?.clearLocalAuthData()
-                    
-                    completion(true)
+                    print("Server disconnect response status code: \(httpResponse.statusCode)")
+                    if httpResponse.statusCode >= 200 && httpResponse.statusCode < 300 {
+                        print("Successfully disconnected from server (tokens revoked by server if applicable).")
+                        completion(true) // Server disconnect successful
+                    } else {
+                        print("Server returned error during disconnect (status code: \(httpResponse.statusCode)).")
+                        completion(false) // Server disconnect failed (server-side error)
+                    }
                 } else {
-                    print("Server returned error during disconnect")
-                    
-                    // Even if server disconnect fails, clear local data
-                    self?.clearLocalAuthData()
-                    
-                    // Consider this a success anyway to continue with logout
-                    completion(true)
+                    print("Invalid response received from server during disconnect.")
+                    completion(false) // Server disconnect failed (invalid response)
                 }
             }
         }.resume()

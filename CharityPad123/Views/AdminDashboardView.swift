@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AdminDashboardView: View {
     @State private var selectedTab: String? = "home"
-    @State private var showingKiosk = false
+    // @State private var showingKiosk = false // This state variable seems unused
     @State private var showLogoutAlert = false
     @State private var isLoggingOut = false
     @AppStorage("isInAdminMode") private var isInAdminMode: Bool = true
@@ -21,7 +21,7 @@ struct AdminDashboardView: View {
                     Text(organizationStore.name)
                         .font(.headline)
                         .padding(.vertical, 8)
-                        .tag(nil as String?)
+                        .tag(nil as String?) // Allows no selection text to show initially if selectedTab is nil
                     
                     NavigationLink(value: "home") {
                         Label("Home Page", systemImage: "house")
@@ -39,14 +39,13 @@ struct AdminDashboardView: View {
                         Label("Timeout Settings", systemImage: "clock")
                     }
                     
-                    // Add the Reader Management link
                     NavigationLink(value: "readers") {
                         Label("Card Readers", systemImage: "creditcard.wireless")
                     }
                     
                     Spacer()
                         .frame(height: 20)
-                        .tag(nil as String?)
+                        .tag(nil as String?) // Needs a unique tag if it's selectable, or make it non-selectable
                     
                     Button(action: {
                         showLogoutAlert = true
@@ -54,7 +53,7 @@ struct AdminDashboardView: View {
                         Label("Logout", systemImage: "arrow.right.square")
                             .foregroundColor(.red)
                     }
-                    .tag(nil as String?)
+                    .tag(nil as String?) // Needs a unique tag or handle selection appropriately
                 }
                 .listStyle(SidebarListStyle())
                 
@@ -70,7 +69,6 @@ struct AdminDashboardView: View {
                             .foregroundColor(squareAuthService.isAuthenticated ? .green : .red)
                     }
                     
-                    // Display reader status if authenticated
                     if squareAuthService.isAuthenticated {
                         HStack {
                             Circle()
@@ -88,10 +86,7 @@ struct AdminDashboardView: View {
                 
                 // Launch Kiosk Button
                 Button(action: {
-                    // Update the DonationViewModel with current preset amounts
                     kioskStore.updateDonationViewModel(donationViewModel)
-                    
-                    // Launch kiosk mode
                     isInAdminMode = false
                 }) {
                     Label("Launch Kiosk", systemImage: "play.circle")
@@ -104,54 +99,51 @@ struct AdminDashboardView: View {
                 .disabled(!squareAuthService.isAuthenticated)
             }
             .navigationTitle("Admin Dashboard")
-            .onChange(of: squareAuthService.isAuthenticated) { _, isAuthenticated in
-                if isAuthenticated {
-                    // Initialize the SDK if authenticated
+            .onChange(of: squareAuthService.isAuthenticated) { newIsAuthenticatedValue in // Use new value
+                if newIsAuthenticatedValue {
                     squarePaymentService.initializeSDK()
                 }
             }
             .onAppear {
-                // Start monitoring for readers
-                squareReaderService.startMonitoring()
-                
-                // Initialize SDK if authenticated
+                // MODIFICATION: Temporarily disable reader service monitoring for diagnostics
+                // DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+                //     if self.isInAdminMode {
+                //         // squareReaderService.startMonitoring() // COMMENT OUT
+                //     }
+                // }
+                print("AdminDashboardView: Reader monitoring TEMPORARILY DISABLED for diagnostics.")
+
                 if squareAuthService.isAuthenticated {
                     squarePaymentService.initializeSDK()
                 }
             }
             .onDisappear {
-                // Stop monitoring when view disappears
-                squareReaderService.stopMonitoring()
+                // squareReaderService.stopMonitoring() // COMMENT OUT
             }
+
         } detail: {
             // Detail content based on selection
             if let selectedTab = selectedTab {
                 switch selectedTab {
                 case "home":
-                    HomePageSettingsView()
-                        .environmentObject(kioskStore)
+                    HomePageSettingsView().environmentObject(kioskStore)
                 case "presetAmounts":
-                    PresetAmountsView()
-                        .environmentObject(kioskStore)
+                    PresetAmountsView().environmentObject(kioskStore)
                 case "receipts":
-                    EmailReceiptsView()
-                        .environmentObject(organizationStore)
+                    EmailReceiptsView().environmentObject(organizationStore)
                 case "timeout":
-                    TimeoutSettingsView()
-                        .environmentObject(kioskStore)
+                    TimeoutSettingsView().environmentObject(kioskStore)
                 case "readers":
                     ReaderManagementView()
                         .environmentObject(squareAuthService)
                         .environmentObject(squareReaderService)
                 default:
                     Text("Select an option from the sidebar")
-                        .font(.title)
-                        .foregroundColor(.gray)
+                        .font(.title).foregroundColor(.gray)
                 }
             } else {
-                Text("Select an option from the sidebar")
-                    .font(.title)
-                    .foregroundColor(.gray)
+                Text("Select an option from the sidebar") // Default view when no tab is selected
+                    .font(.title).foregroundColor(.gray)
             }
         }
         .alert(isPresented: $showLogoutAlert) {
@@ -159,115 +151,116 @@ struct AdminDashboardView: View {
                 title: Text("Are you sure you want to logout?"),
                 message: Text("You will need to log back in to access the admin panel."),
                 primaryButton: .destructive(Text("Logout")) {
-                    // Call the comprehensive logout method
-                    performCompleteLogout()
+                    showLogoutAlert = false // Dismiss alert first
+                    // Increased delay to ensure alert dismissal before starting heavy logout ops
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        initiateLogoutProcess()
+                    }
                 },
-                secondaryButton: .cancel()
+                secondaryButton: .cancel() {
+                    showLogoutAlert = false
+                }
             )
         }
-        // Add loading overlay when logging out
         .overlay(
             Group {
                 if isLoggingOut {
                     ZStack {
-                        Color.black.opacity(0.6)
-                            .edgesIgnoringSafeArea(.all)
-                        
+                        Color.black.opacity(0.6).edgesIgnoringSafeArea(.all)
                         VStack(spacing: 16) {
-                            ProgressView()
-                                .scaleEffect(1.5)
-                                .padding()
-                            
-                            Text("Logging out...")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding(.bottom, 4)
-                            
-                            Text("Please wait while we clean up your session")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.8))
+                            ProgressView().scaleEffect(1.5).padding()
+                            Text("Logging out...").font(.headline).foregroundColor(.white).padding(.bottom, 4)
+                            Text("Please wait while we clean up your session").font(.caption).foregroundColor(.white.opacity(0.8))
                         }
-                        .padding(24)
-                        .background(Color(.systemBackground).opacity(0.9))
-                        .cornerRadius(16)
-                        .shadow(radius: 10)
+                        .padding(24).background(Color(.systemBackground).opacity(0.9)).cornerRadius(16).shadow(radius: 10)
                     }
-                    .transition(.opacity)
-                    .animation(.easeInOut, value: isLoggingOut)
+                    .transition(.opacity).animation(.easeInOut, value: isLoggingOut)
                 }
             }
         )
-        // Add a receiver for authentication state changes
         .onReceive(NotificationCenter.default.publisher(for: .squareAuthenticationStatusChanged)) { _ in
-            // This ensures the UI updates when auth state changes during logout
-            print("Received authentication status change notification")
+            print("AdminDashboardView: Received .squareAuthenticationStatusChanged notification")
+            // Potentially refresh parts of the UI if needed, but avoid causing re-render loops.
         }
     }
     
-    // MARK: - Logout Methods
+    // MARK: - Refactored Logout Methods
     
-    private func performCompleteLogout() {
-        // 1. First show loading indicator
-        isLoggingOut = true
-        
-        // 2. Try to disconnect from the server first to clean up server-side
-        squareAuthService.disconnectFromServer { success in
-            // Whether server disconnect succeeds or fails, continue with local cleanup
-            print("Server disconnect \(success ? "succeeded" : "failed"), continuing with local cleanup")
-            
-            // 3. Deauthorize the SDK
-            if self.squareAuthService.isAuthenticated {
-                self.squarePaymentService.deauthorizeSDK {
-                    self.continueLogoutAfterDeauthorization()
-                }
-            } else {
-                // If not authenticated, skip SDK deauthorization
-                self.continueLogoutAfterDeauthorization()
-            }
-        }
-    }
+    private func initiateLogoutProcess() {
+        isLoggingOut = true // Show "Logging out..." overlay
 
-    private func continueLogoutAfterDeauthorization() {
-        // 4. Stop all monitoring processes
+        // Step 1: Deauthorize Square SDK (if currently authenticated)
+        if squareAuthService.isAuthenticated {
+            print("Logout: Deauthorizing Square SDK...")
+            squarePaymentService.deauthorizeSDK {
+                print("Logout: SDK deauthorization complete.")
+                self.attemptServerDisconnect()
+            }
+        } else {
+            print("Logout: SDK already deauthorized or was never authorized. Skipping deauth.")
+            self.attemptServerDisconnect()
+        }
+    }
+    
+    private func attemptServerDisconnect() {
+        // Step 2: Attempt to disconnect from your backend server
+        print("Logout: Attempting to disconnect from server...")
+        squareAuthService.disconnectFromServer { serverDisconnectSuccess in
+            print("Logout: Server disconnect attempt finished (success: \(serverDisconnectSuccess)).")
+            // Regardless of server disconnect success, proceed with client-side cleanup.
+            self.finalizeClientSideLogout()
+        }
+    }
+    
+    private func finalizeClientSideLogout() {
+        print("Logout: Finalizing client-side logout...")
+        // Step 3: Stop other services like reader monitoring
         squareReaderService.stopMonitoring()
         
-        // 5. Clear any cached data
+        // Step 4: Reset local view models and non-auth related state
         donationViewModel.resetDonation()
         
-        // 6. Final cleanup with delay to ensure all processes complete
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            // 7. Set to admin mode first to prevent any navigation issues
-            self.isInAdminMode = true
+        // Step 5: Clear all local Square authentication data.
+        // This will set squareAuthService.isAuthenticated to false,
+        // which should trigger UI updates in ContentView via @AppStorage and @EnvironmentObject.
+        squareAuthService.clearLocalAuthData()
+        print("Logout: Local auth data cleared. isAuthenticated should be false.")
+
+        // Step 6: Perform final UI state transitions to navigate to Onboarding
+        // A short delay can help ensure that state changes from clearLocalAuthData propagate
+        // before these final @AppStorage changes take full effect for ContentView.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { // Minimal delay for state propagation
+            self.isInAdminMode = true // Ensure this is set correctly for ContentView logic
+            UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding") // Key trigger for ContentView
             
-            // 8. Clear local auth data
-            self.squareAuthService.clearLocalAuthData()
-            
-            // 9. Finally update onboarding flag to trigger ContentView transition
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
-                
-                // 10. Reset logout state
-                self.isLoggingOut = false
-                
-                // 11. Force a UI refresh
-                NotificationCenter.default.post(name: NSNotification.Name("ForceViewRefresh"), object: nil)
-            }
+            // Hide the "Logging out..." overlay
+            self.isLoggingOut = false
+            print("Logout: Process complete. Should navigate to Onboarding.")
+
+            // Consider removing ForceViewRefresh if @AppStorage and @EnvironmentObject changes
+            // are reliably updating ContentView. If not, it can be a fallback.
+            // NotificationCenter.default.post(name: NSNotification.Name("ForceViewRefresh"), object: nil)
         }
     }
 }
 
+// Preview remains the same
 struct AdminDashboardView_Previews: PreviewProvider {
     static var previews: some View {
         let authService = SquareAuthService()
         let catalogService = SquareCatalogService(authService: authService)
-        
-        AdminDashboardView()
+        let paymentService = SquarePaymentService(authService: authService, catalogService: catalogService)
+        let readerService = SquareReaderService(authService: authService)
+        // Crucial: Connect readerService to paymentService (if this pattern is used in your app setup)
+        // paymentService.setReaderService(readerService) // Assuming paymentService has such a method
+
+        return AdminDashboardView()
             .environmentObject(OrganizationStore())
             .environmentObject(KioskStore())
             .environmentObject(DonationViewModel())
             .environmentObject(authService)
             .environmentObject(catalogService)
-            .environmentObject(SquarePaymentService(authService: authService, catalogService: catalogService))
-            .environmentObject(SquareReaderService(authService: authService))
+            .environmentObject(paymentService)
+            .environmentObject(readerService)
     }
 }

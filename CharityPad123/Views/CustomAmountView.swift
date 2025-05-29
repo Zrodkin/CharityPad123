@@ -5,13 +5,14 @@ struct UpdatedCustomAmountView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var amountString: String = ""
     @State private var errorMessage: String? = nil
+    @State private var shakeOffset: CGFloat = 0
     
     // Callback for when amount is selected
     var onAmountSelected: (Double) -> Void
     
     var body: some View {
         ZStack {
-            // Background image
+            // Background image (from old design)
             if let backgroundImage = kioskStore.backgroundImage {
                 Image(uiImage: backgroundImage)
                     .resizable()
@@ -26,19 +27,21 @@ struct UpdatedCustomAmountView: View {
                     .blur(radius: 5)
             }
             
-            // Dark overlay
+            // Dark overlay (from old design)
             Color.black.opacity(0.55)
                 .edgesIgnoringSafeArea(.all)
             
             VStack(spacing: 20) {
-                // Amount display
+                // Clean amount display with cute shake animation
                 Text("$\(amountString.isEmpty ? "0" : amountString)")
                     .font(.system(size: 65, weight: .bold))
                     .foregroundColor(.white)
                     .padding(.top, 120)
                     .padding(.bottom, 10)
+                    .offset(x: shakeOffset)
+                    .animation(.easeInOut(duration: 0.1), value: shakeOffset)
                 
-                // Error message
+                // Error message (with modern animations)
                 if let errorMessage = errorMessage {
                     Text(errorMessage)
                         .font(.system(size: 16))
@@ -48,9 +51,10 @@ struct UpdatedCustomAmountView: View {
                         .padding(.vertical, 10)
                         .background(Color.red.opacity(0.7))
                         .cornerRadius(10)
+                        .transition(.opacity)
                 }
                 
-                // Keypad
+                // Keypad (old design layout with modern functionality)
                 VStack(spacing: 12) {
                     // Row 1
                     HStack(spacing: 12) {
@@ -79,9 +83,9 @@ struct UpdatedCustomAmountView: View {
                         }
                     }
                     
-                    // Row 4
+                    // Row 4 (old design layout)
                     HStack(spacing: 12) {
-                        // Delete button
+                        // Delete button (old design)
                         Button(action: handleDelete) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 12)
@@ -99,7 +103,7 @@ struct UpdatedCustomAmountView: View {
                             handleNumberPress("0")
                         }
                         
-                        // Next button
+                        // Next button (always enabled so we can show cute shake)
                         Button(action: {
                             handleDone()
                         }) {
@@ -113,7 +117,6 @@ struct UpdatedCustomAmountView: View {
                                     .foregroundColor(.white)
                             }
                         }
-                        .disabled(amountString.isEmpty)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -136,82 +139,166 @@ struct UpdatedCustomAmountView: View {
                 }
             }
         }
+        .onAppear {
+            print("📱 UpdatedCustomAmountView appeared")
+        }
+        .onDisappear {
+            print("📱 UpdatedCustomAmountView disappeared")
+        }
     }
     
-    // MARK: - Helper Methods
+    // MARK: - Helper Methods (modern functionality)
     
     private func handleNumberPress(_ num: String) {
-        // Limit the number of digits to prevent overflow or excessively long numbers
         let maxDigits = 7
         
-        // Prevent adding leading zeros if the amount is already "0"
+        // Prevent leading zeros
         if amountString.isEmpty && num == "0" {
             return
         }
         
-        // Create a temporary string to check if the new amount would exceed the max
+        // Check if adding this number would exceed maximum
         let tempAmount = amountString + num
-        
-        // Check if the new amount would exceed the max amount
         if let amount = Double(tempAmount),
            let maxAmount = Double(kioskStore.maxAmount) {
             if amount > maxAmount {
-                errorMessage = "Maximum amount is $\(Int(maxAmount))"
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    errorMessage = "Maximum amount is $\(Int(maxAmount))"
+                }
+                
+                // Clear error after 3 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        errorMessage = nil
+                    }
+                }
                 return
             }
         }
         
-        // Append the number if under max digits
+        // Add the number if under max digits
         if amountString.count < maxDigits {
             amountString += num
+            print("💰 Amount updated to: \(amountString)")
         }
         
-        // Clear error message when valid input is entered
-        errorMessage = nil
+        // Clear any existing error (with animation)
+        if errorMessage != nil {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                errorMessage = nil
+            }
+        }
+        
+        // Modern haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
     }
     
     private func handleDelete() {
         if !amountString.isEmpty {
             amountString.removeLast()
+            print("🗑️ Amount after delete: \(amountString)")
         }
         
-        // Clear error message when deleting
-        errorMessage = nil
+        // Clear any existing error (with animation)
+        if errorMessage != nil {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                errorMessage = nil
+            }
+        }
+        
+        // Modern haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
     }
     
     private func handleDone() {
+        print("✅ handleDone called with amountString: '\(amountString)'")
+        
         // Convert amount to Double
-        if let amount = Double(amountString), amount > 0 {
-            // Check minimum amount
-            if let minAmount = Double(kioskStore.minAmount), amount < minAmount {
+        guard let amount = Double(amountString), amount > 0 else {
+            // Cute shake animation for $0 or empty amount! 🎯
+            if amountString.isEmpty {
+                print("💫 Triggering cute shake animation for $0")
+                withAnimation(.interpolatingSpring(stiffness: 600, damping: 5)) {
+                    shakeAmount()
+                }
+                
+                // Add a playful haptic pattern
+                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                impactFeedback.impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    impactFeedback.impactOccurred()
+                }
+                
+                return // Don't show error message, just the cute shake
+            } else {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    errorMessage = "Please enter a valid amount"
+                }
+            }
+            print("❌ Invalid amount entered: '\(amountString)'")
+            return
+        }
+        
+        // Check minimum amount
+        if let minAmount = Double(kioskStore.minAmount), amount < minAmount {
+            withAnimation(.easeInOut(duration: 0.3)) {
                 errorMessage = "Minimum amount is $\(Int(minAmount))"
-                return
             }
-            
-            // Check maximum amount
-            if let maxAmount = Double(kioskStore.maxAmount), amount > maxAmount {
+            print("❌ Amount below minimum: \(amount) < \(minAmount)")
+            return
+        }
+        
+        // Check maximum amount
+        if let maxAmount = Double(kioskStore.maxAmount), amount > maxAmount {
+            withAnimation(.easeInOut(duration: 0.3)) {
                 errorMessage = "Maximum amount is $\(Int(maxAmount))"
-                return
             }
-            
-            // Call the callback with the selected amount
-            onAmountSelected(amount)
-            
-            // Dismiss this view
-            dismiss()
-        } else {
-            errorMessage = "Please enter a valid amount"
+            print("❌ Amount above maximum: \(amount) > \(maxAmount)")
+            return
+        }
+        
+        print("✅ Valid amount entered: $\(amount)")
+        print("🚀 Calling onAmountSelected callback...")
+        
+        // Modern haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
+        // Call the callback with the selected amount
+        onAmountSelected(amount)
+        
+        print("📤 Callback completed")
+    }
+    
+    // MARK: - Cute shake animation helper
+    private func shakeAmount() {
+        let shakeSequence: [CGFloat] = [0, -8, 8, -6, 6, -4, 4, -2, 2, 0]
+        
+        for (index, offset) in shakeSequence.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.05) {
+                shakeOffset = offset
+            }
         }
     }
 }
 
+// MARK: - Keypad Button Component (old design with modern touch feedback)
+
 struct KeypadButton: View {
     let number: Int
-    let letters: String // Sub-text for the button (e.g., "ABC" for 2)
+    let letters: String
     let action: () -> Void
     
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            // Modern haptic feedback
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            
+            action()
+        }) {
             VStack(spacing: 2) {
                 Text("\(number)")
                     .font(.system(size: 24, weight: .bold))
@@ -223,19 +310,35 @@ struct KeypadButton: View {
                         .foregroundColor(.white.opacity(0.3))
                 }
             }
-            .frame(maxWidth: .infinity) // Make button take available width
-            .frame(height: 64) // Fixed height for the button
+            .frame(maxWidth: .infinity)
+            .frame(height: 64)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.white.opacity(0.2)) // Semi-transparent background
+                    .fill(Color.white.opacity(0.2))
             )
         }
+        .buttonStyle(KeypadButtonStyle())
     }
 }
 
+// MARK: - Modern Button Style
+
+struct KeypadButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Preview
+
 struct UpdatedCustomAmountView_Previews: PreviewProvider {
     static var previews: some View {
-        UpdatedCustomAmountView(onAmountSelected: { _ in })
-            .environmentObject(KioskStore())
+        UpdatedCustomAmountView { amount in
+            print("Preview: Selected amount \(amount)")
+        }
+        .environmentObject(KioskStore())
     }
 }

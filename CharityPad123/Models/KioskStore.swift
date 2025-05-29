@@ -51,7 +51,7 @@ class KioskStore: ObservableObject {
             self?.clearCatalogState()
         }
     }
-
+    
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
@@ -346,7 +346,7 @@ class KioskStore: ObservableObject {
         
         print("✅ Updated \(updatedDonations.count) preset donations, \(updatedDonations.filter { $0.isSync }.count) synced")
     }
-
+    
     /// NEW: Clear all catalog state when disconnecting
     func clearCatalogState() {
         print("🔄 Clearing all catalog state due to authentication change")
@@ -450,55 +450,217 @@ class KioskStore: ObservableObject {
         isCustomAmount: Bool,
         completion: @escaping (String?, Error?) -> Void
     ) {
-        guard let catalogService = catalogService else {
+        print("🛒 KioskStore.createDonationOrder called")
+        print("💰 Amount: $\(amount)")
+        print("🎯 Is Custom: \(isCustomAmount)")
+        
+        guard amount > 0 else {
             let error = NSError(
                 domain: "com.charitypad",
                 code: 400,
-                userInfo: [NSLocalizedDescriptionKey: "Catalog service not connected"]
+                userInfo: [NSLocalizedDescriptionKey: "Invalid amount: \(amount)"]
             )
+            print("❌ Invalid amount provided")
             completion(nil, error)
             return
         }
         
-        print("🛒 Creating donation order via KioskStore")
-        print("💰 Amount: $\(amount)")
-        print("🎯 Is Custom: \(isCustomAmount)")
+        // Construct URL for the order creation endpoint
+        guard let url = URL(string: "\(SquareConfig.backendBaseURL)/api/square/orders/create") else {
+            let error = NSError(
+                domain: "com.charitypad",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid request URL"]
+            )
+            print("❌ Invalid backend URL")
+            completion(nil, error)
+            return
+        }
         
-        // If using a preset amount, find the matching catalog item ID
-        var catalogItemId: String? = nil
+        var requestBody: [String: Any]
         
-        if !isCustomAmount {
-            // Find the preset donation with the matching amount
+        if isCustomAmount {
+            // FIXED: Use new custom amount parameters
+            requestBody = [
+                "organization_id": SquareConfig.organizationId,
+                "is_custom_amount": true,
+                "custom_amount": amount,
+                "reference_id": "custom_donation_\(Int(Date().timeIntervalSince1970))",
+                "state": "OPEN"
+            ]
+            
+            print("📝 Creating custom amount order request")
+            print("🔧 Using new backend custom amount flow")
+        } else {
+            // For preset amounts, try to find matching catalog item
+            var catalogItemId: String? = nil
+            
             if let donation = presetDonations.first(where: { Double($0.amount) == amount }) {
                 catalogItemId = donation.catalogItemId
                 print("📋 Found catalog item ID: \(catalogItemId ?? "nil")")
             } else {
                 print("⚠️ No catalog item found for preset amount $\(amount)")
             }
+            
+            var lineItem: [String: Any]
+            
+            if let catalogItemId = catalogItemId {
+                // Use catalog item for preset amount
+                lineItem = [
+                    "catalogObjectId": catalogItemId,
+                    "quantity": "1"
+                ]
+                print("📋 Using catalog item: \(catalogItemId)")
+            } else {
+                // Fallback to ad-hoc item for preset amount
+                lineItem = [
+                    "name": "$\(Int(amount)) Donation",
+                    "quantity": "1",
+                    "basePriceMoney": [
+                        "amount": Int(amount * 100),
+                        "currency": "USD"
+                    ]
+                ]
+                print("🏗️ Using ad-hoc item fallback")
+            }
+            
+            requestBody = [
+                "organization_id": SquareConfig.organizationId,
+                "line_items": [lineItem],
+                "reference_id": "preset_donation_\(Int(Date().timeIntervalSince1970))",
+                "state": "OPEN"
+            ]
+            
+            print("📝 Creating preset amount order request")
         }
         
-        // Use the catalog service to create the order
-        catalogService.createDonationOrder(
-            amount: amount,
-            isCustom: isCustomAmount,
-            catalogItemId: catalogItemId,
-            completion: { orderId, error in
+        // Create and configure the request
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: requestBody)
+            request.httpBody = jsonData
+            
+            // Log request for debugging
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                print("📤 Request body: \(jsonString)")
+            }
+        } catch {
+            print("❌ Failed to serialize request: \(error)")
+            completion(nil, error)
+            return
+        }
+        
+        print("🌐 Making request to: \(url)")
+        
+        // Make the network request
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                // Handle network error
                 if let error = error {
-                    print("❌ Order creation failed: \(error.localizedDescription)")
+                    print("❌ Network error: \(error.localizedDescription)")
                     completion(nil, error)
-                } else if let orderId = orderId {
-                    print("✅ Order created successfully: \(orderId)")
-                    completion(orderId, nil)
-                } else {
+                    return
+                }
+                
+                // Log HTTP response status
+                if let httpResponse = response as? HTTPURLResponse {
+                    print("📡 HTTP Status: \(httpResponse.statusCode)")
+                }
+                
+                // Handle missing data
+                guard let data = data else {
                     let error = NSError(
                         domain: "com.charitypad",
                         code: 500,
-                        userInfo: [NSLocalizedDescriptionKey: "No order ID returned"]
+                        userInfo: [NSLocalizedDescriptionKey: "No data received from server"]
                     )
-                    print("❌ No order ID returned")
+                    print("❌ No data received")
+                    completion(nil, error)
+                    return
+                }
+                
+                // Log raw response for debugging
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("📥 Response: \(responseString)")
+                }
+                
+                // Parse JSON response
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        
+                        // Check for success field
+                        if let success = json["success"] as? Bool, !success {
+                            // Handle structured error response
+                            let errorMessage = json["error"] as? String ?? "Order creation failed"
+                            let nsError = NSError(
+                                domain: "com.charitypad",
+                                code: 500,
+                                userInfo: [NSLocalizedDescriptionKey: errorMessage]
+                            )
+                            print("❌ Server error: \(errorMessage)")
+                            completion(nil, nsError)
+                            return
+                        }
+                        
+                        // Handle legacy error field
+                        if let error = json["error"] as? String {
+                            let nsError = NSError(
+                                domain: "com.charitypad",
+                                code: 500,
+                                userInfo: [NSLocalizedDescriptionKey: error]
+                            )
+                            print("❌ Backend error: \(error)")
+                            completion(nil, nsError)
+                            return
+                        }
+                        
+                        // Extract order ID
+                        if let orderId = json["order_id"] as? String {
+                            print("✅ Order created successfully: \(orderId)")
+                            
+                            // Log additional order details if available
+                            if let totalMoney = json["total_money"] as? [String: Any],
+                               let amount = totalMoney["amount"] as? Int {
+                                let dollarAmount = Double(amount) / 100.0
+                                print("💰 Order total: $\(dollarAmount)")
+                            }
+                            
+                            if let lineItems = json["line_items"] as? [[String: Any]] {
+                                print("📋 Line items count: \(lineItems.count)")
+                                for (index, item) in lineItems.enumerated() {
+                                    if let name = item["name"] as? String {
+                                        print("📋 Item \(index): \(name)")
+                                    }
+                                }
+                            }
+                            
+                            completion(orderId, nil)
+                        } else {
+                            let error = NSError(
+                                domain: "com.charitypad",
+                                code: 500,
+                                userInfo: [NSLocalizedDescriptionKey: "No order ID in response"]
+                            )
+                            print("❌ No order ID in response")
+                            completion(nil, error)
+                        }
+                    } else {
+                        let error = NSError(
+                            domain: "com.charitypad",
+                            code: 500,
+                            userInfo: [NSLocalizedDescriptionKey: "Invalid JSON response"]
+                        )
+                        print("❌ Failed to parse JSON response")
+                        completion(nil, error)
+                    }
+                } catch {
+                    print("❌ JSON parsing error: \(error)")
                     completion(nil, error)
                 }
             }
-        )
+        }.resume()
     }
 }
