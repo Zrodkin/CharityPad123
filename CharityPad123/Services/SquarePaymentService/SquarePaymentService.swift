@@ -33,6 +33,7 @@ class SquarePaymentService: NSObject, ObservableObject {
     // MARK: - Private Properties
     
     private var readerService: SquareReaderService?
+    private var kioskStore: KioskStore? // Add KioskStore dependency
     private var paymentHandle: PaymentHandle?
     private let idempotencyKeyManager = IdempotencyKeyManager()
     
@@ -93,6 +94,11 @@ class SquarePaymentService: NSObject, ObservableObject {
         self.readerService = readerService
         // Configure the reader service with this payment service and permission service
         readerService.configure(with: self, permissionService: permissionService)
+    }
+    
+    /// Set the kiosk store dependency
+    func setKioskStore(_ kioskStore: KioskStore) {
+        self.kioskStore = kioskStore
     }
     
     /// Deauthorize the Square SDK
@@ -268,8 +274,8 @@ class SquarePaymentService: NSObject, ObservableObject {
     ) {
         print("📝 Creating order before payment...")
         
-        // Use the KioskStore to create the order
-        guard let kioskStore = findKioskStore() else {
+        // Use the injected KioskStore to create the order
+        guard let kioskStore = self.kioskStore else {
             DispatchQueue.main.async { [weak self] in
                 self?.paymentError = "Unable to create order - kiosk service not available"
                 completion(false, nil)
@@ -367,12 +373,6 @@ class SquarePaymentService: NSObject, ObservableObject {
             from: presentedVC,
             delegate: self
         )
-    }
-    
-    private func findKioskStore() -> KioskStore? {
-        // This is a simple way to find the KioskStore - in a real app you might inject this dependency
-        // For now, we'll assume it's available in the environment
-        return nil // You'll need to inject this properly in your app
     }
     
     // MARK: - Helper Methods

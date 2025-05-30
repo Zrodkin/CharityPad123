@@ -46,7 +46,6 @@ struct DonationPadApp: App {
         _kioskStore = StateObject(wrappedValue: kiosk)
         _paymentService = StateObject(wrappedValue: payment)
         _readerService = StateObject(wrappedValue: reader)
-        // _permissionServiceForReader is already assigned above.
 
         // MARK: - Post-Initialization Configurations
         // Call configure/connect methods in the correct order.
@@ -59,11 +58,14 @@ struct DonationPadApp: App {
         //    (SquarePaymentService.setReaderService(_: SquareReaderService))
         payment.setReaderService(reader)
 
-        // 7. Configure the ReaderService. It needs the paymentService and the permissionService (permForReaderInstance).
+        // 7. NEW: Set the KioskStore on the PaymentService for order creation
+        payment.setKioskStore(kiosk)
+
+        // 8. Configure the ReaderService. It needs the paymentService and the permissionService (permForReaderInstance).
         //    (SquareReaderService.configure(with: SquarePaymentService, permissionService: SquarePermissionService))
         reader.configure(with: payment, permissionService: permForReaderInstance)
 
-        // 8. Connect KioskStore to CatalogService.
+        // 9. Connect KioskStore to CatalogService.
         //    (KioskStore.connectCatalogService(_: SquareCatalogService))
         kiosk.connectCatalogService(catalog)
     }

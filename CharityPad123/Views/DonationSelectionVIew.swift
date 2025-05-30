@@ -64,7 +64,7 @@ struct DonationSelectionView: View {
             }
         }
         .navigationDestination(isPresented: $navigateToCheckout) {
-            UpdatedCheckoutView(
+            CheckoutView(
                 amount: donationViewModel.selectedAmount ?? 0,
                 isCustomAmount: donationViewModel.isCustomAmount,
                 onDismiss: {

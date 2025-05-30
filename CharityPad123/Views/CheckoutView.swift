@@ -1,8 +1,8 @@
-// MARK: - Updated CheckoutView with Consistent Layout
+// MARK: - Fixed CheckoutView with Correct Payment Methods
 import SwiftUI
 import SquareMobilePaymentsSDK
 
-struct UpdatedCheckoutView: View {
+struct CheckoutView: View {
     let amount: Double
     let isCustomAmount: Bool
     
@@ -23,7 +23,6 @@ struct UpdatedCheckoutView: View {
     @State private var processingState: ProcessingState = .ready
     @State private var orderId: String? = nil
     @State private var paymentId: String? = nil
-    @State private var useOrderBasedFlow = true
     
     // Processing state enum
     enum ProcessingState {
@@ -216,7 +215,7 @@ struct UpdatedCheckoutView: View {
     private var buttonText: String {
         switch processingState {
         case .ready:
-            return useOrderBasedFlow ? "Process Donation" : "Process Payment"
+            return "Process Donation"
         case .creatingOrder:
             return "Creating Order..."
         case .processingPayment:
@@ -340,19 +339,13 @@ struct UpdatedCheckoutView: View {
     }
     
     private func processPayment() {
-        if useOrderBasedFlow {
-            processOrderBasedPayment()
-        } else {
-            processDirectPayment()
-        }
-    }
-    
-    private func processOrderBasedPayment() {
+        // Check authentication
         if !squareAuthService.isAuthenticated {
             showingSquareAuth = true
             return
         }
         
+        // Check reader connection
         if !paymentService.isReaderConnected {
             paymentService.paymentError = "Card reader not connected. Please contact staff."
             showingError = true
@@ -360,98 +353,47 @@ struct UpdatedCheckoutView: View {
         }
         
         resetPaymentState()
+        processingState = .processingPayment
         
-        processingState = .creatingOrder
-        print("🛒 Starting order-based payment flow for amount: $\(amount)")
+        print("🚀 Starting payment processing for amount: $\(amount)")
+        print("💰 Is custom amount: \(isCustomAmount)")
         
-        kioskStore.createDonationOrder(
-            amount: amount,
-            isCustomAmount: isCustomAmount
-        ) { createdOrderId, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    print("❌ Order creation failed: \(error.localizedDescription)")
-                    self.paymentService.paymentError = "Failed to create order: \(error.localizedDescription)"
-                    self.processingState = .error
-                    self.showingError = true
-                    return
-                }
-                
-                guard let createdOrderId = createdOrderId else {
-                    print("❌ No order ID returned")
-                    self.paymentService.paymentError = "Failed to create order: No order ID returned"
-                    self.processingState = .error
-                    self.showingError = true
-                    return
-                }
-                
-                self.orderId = createdOrderId
-                print("✅ Order created successfully: \(createdOrderId)")
-                
-                self.processingState = .processingPayment
-                print("💳 Processing payment with order ID: \(createdOrderId)")
-                
-                self.paymentService.processPaymentWithOrder(
-                    amount: self.amount,
-                    orderId: createdOrderId
-                ) { success, transactionId in
-                    DispatchQueue.main.async {
-                        if success {
-                            print("✅ Payment successful! Transaction ID: \(transactionId ?? "N/A")")
-                            
-                            self.donationViewModel.recordDonation(amount: self.amount, transactionId: transactionId)
-                            self.paymentId = transactionId
-                            self.processingState = .completed
-                            self.showingThankYou = true
-                        } else {
-                            print("❌ Payment failed")
-                            self.processingState = .error
-                            self.showingError = true
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private func processDirectPayment() {
-        if !squareAuthService.isAuthenticated {
-            showingSquareAuth = true
-            return
-        }
-        
-        if !paymentService.isReaderConnected {
-            paymentService.paymentError = "Card reader not connected. Please contact staff."
-            showingError = true
-            return
-        }
-        
-        resetPaymentState()
-        
+        // Find catalog item ID if this is a preset amount
         var catalogItemId: String? = nil
-        
         if !isCustomAmount {
             if let donation = kioskStore.presetDonations.first(where: { Double($0.amount) == amount }) {
                 catalogItemId = donation.catalogItemId
+                print("📋 Found catalog item ID: \(catalogItemId ?? "nil")")
             }
         }
         
-        processingState = .processingPayment
-        
+        // Use the unified payment processing method from SquarePaymentService
         paymentService.processPayment(
             amount: amount,
+            orderId: nil, // Let the service create the order
             isCustomAmount: isCustomAmount,
-            catalogItemId: catalogItemId
+            catalogItemId: catalogItemId,
+            allowOffline: true
         ) { success, transactionId in
-            if success {
-                donationViewModel.recordDonation(amount: amount, transactionId: transactionId)
-                orderId = paymentService.currentOrderId
-                paymentId = transactionId
-                processingState = .completed
-                showingThankYou = true
-            } else {
-                processingState = .error
-                showingError = true
+            DispatchQueue.main.async {
+                if success {
+                    print("✅ Payment successful! Transaction ID: \(transactionId ?? "N/A")")
+                    
+                    // Record the donation
+                    self.donationViewModel.recordDonation(amount: self.amount, transactionId: transactionId)
+                    
+                    // Store IDs for display
+                    self.orderId = self.paymentService.currentOrderId
+                    self.paymentId = transactionId
+                    
+                    // Update state
+                    self.processingState = .completed
+                    self.showingThankYou = true
+                } else {
+                    print("❌ Payment failed")
+                    self.processingState = .error
+                    self.showingError = true
+                }
             }
         }
     }
@@ -465,12 +407,12 @@ struct UpdatedCheckoutView: View {
     }
 }
 
-struct UpdatedCheckoutView_Previews: PreviewProvider {
+struct CheckoutView_Previews: PreviewProvider {
     static var previews: some View {
         let authService = SquareAuthService()
         let catalogService = SquareCatalogService(authService: authService)
         
-        return UpdatedCheckoutView(amount: 50.0, isCustomAmount: false, onDismiss: {})
+        return CheckoutView(amount: 50.0, isCustomAmount: false, onDismiss: {})
             .environmentObject(KioskStore())
             .environmentObject(DonationViewModel())
             .environmentObject(authService)
