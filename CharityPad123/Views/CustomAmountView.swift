@@ -2,15 +2,29 @@ import SwiftUI
 
 struct UpdatedCustomAmountView: View {
     @EnvironmentObject var kioskStore: KioskStore
+    @EnvironmentObject var donationViewModel: DonationViewModel
+    @EnvironmentObject var squareAuthService: SquareAuthService
+    @EnvironmentObject var paymentService: SquarePaymentService // Add payment service
     @Environment(\.dismiss) private var dismiss
     @State private var amountString: String = ""
     @State private var errorMessage: String? = nil
     @State private var shakeOffset: CGFloat = 0
-    @State private var navigateToCheckout = false
-    @State private var navigateToHome = false // 🆕 NEW: Navigation to home
+    @State private var navigateToHome = false
+    
+    // NEW: Add payment processing states
+    @State private var isProcessingPayment = false
+    @State private var showingSquareAuth = false
+    @State private var showingThankYou = false
+    @State private var showingReceiptPrompt = false
+    @State private var showingEmailEntry = false
+    @State private var emailAddress = ""
+    @State private var isEmailValid = false
+    @State private var isSendingReceipt = false
+    @State private var orderId: String? = nil
+    @State private var paymentId: String? = nil
     @State private var selectedAmount: Double = 0
     
-    // Callback for when amount is selected
+    // Callback for when amount is selected (keeping for compatibility)
     var onAmountSelected: (Double) -> Void
     
     var body: some View {
@@ -113,20 +127,27 @@ struct UpdatedCustomAmountView: View {
                             handleNumberPress("0")
                         }
                         
-                        // Next button
+                        // CHANGED: Process Payment button instead of Next
                         Button(action: {
                             handleDone()
                         }) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white.opacity(0.2))
+                                    .fill(Color.green.opacity(0.8))
                                     .frame(height: 64)
                                 
-                                Image(systemName: "arrow.forward")
-                                    .font(.system(size: 20, weight: .medium))
-                                    .foregroundColor(.white)
+                                if isProcessingPayment {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "creditcard")
+                                        .font(.system(size: 20, weight: .medium))
+                                        .foregroundColor(.white)
+                                }
                             }
                         }
+                        .disabled(isProcessingPayment)
                     }
                 }
                 .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
@@ -134,6 +155,26 @@ struct UpdatedCustomAmountView: View {
                 
                 Spacer()
                     .frame(height: KioskLayoutConstants.bottomSafeArea)
+            }
+            
+            // NEW: Payment processing overlay
+            if isProcessingPayment {
+                paymentProcessingOverlay
+            }
+            
+            // NEW: Success overlay
+            if showingThankYou {
+                thankYouOverlay
+            }
+            
+            // NEW: Receipt prompt overlay
+            if showingReceiptPrompt {
+                receiptPromptOverlay
+            }
+            
+            // NEW: Email entry overlay
+            if showingEmailEntry {
+                emailEntryOverlay
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -151,26 +192,274 @@ struct UpdatedCustomAmountView: View {
         }
         .onAppear {
             print("📱 UpdatedCustomAmountView appeared")
+            
+            // Connect to reader if not already connected
+            if !paymentService.isReaderConnected {
+                paymentService.connectToReader()
+            }
         }
         .onDisappear {
             print("📱 UpdatedCustomAmountView disappeared")
         }
-        // 🆕 NEW: Navigation destinations
-        .navigationDestination(isPresented: $navigateToCheckout) {
-            CheckoutView(
-                amount: selectedAmount,
-                isCustomAmount: true,
-                onDismiss: {
-                    navigateToCheckout = false
-                },
-                onNavigateToHome: {
-                    handleNavigateToHome()
-                }
-            )
-        }
         .navigationDestination(isPresented: $navigateToHome) {
             HomeView()
                 .navigationBarBackButtonHidden(true)
+        }
+        .sheet(isPresented: $showingSquareAuth) {
+            SquareAuthorizationView()
+        }
+        // NEW: Monitor payment processing
+        .onReceive(paymentService.$isProcessingPayment) { processing in
+            if !processing && isProcessingPayment {
+                // Payment finished - but let the completion handler deal with the result
+                // Don't immediately handle the result here to avoid interfering with Square UI
+                print("🔄 Payment processing state changed to: \(processing)")
+            }
+        }
+    }
+    
+    // NEW: Payment processing overlay
+    private var paymentProcessingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.8)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 20) {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
+                
+                VStack(spacing: 8) {
+                    Text("Processing Payment")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text("Please follow the prompts on your card reader")
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(40)
+        }
+    }
+    
+    // NEW: Thank you overlay
+    private var thankYouOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.8)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 20) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 70))
+                    .foregroundColor(.green)
+                
+                Text("Thank You!")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Text("Your donation has been processed.")
+                    .foregroundColor(.white)
+                
+                if let orderId = orderId {
+                    Text("Order: \(orderId)")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                
+                if let paymentId = paymentId {
+                    Text("Payment: \(paymentId)")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                
+                Button("Done") {
+                    showingThankYou = false
+                    showingReceiptPrompt = true
+                }
+                .padding(.horizontal, 40)
+                .padding(.vertical, 10)
+                .background(Color.green)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .padding(.top, 20)
+            }
+            .padding()
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                if showingThankYou {
+                    showingThankYou = false
+                    showingReceiptPrompt = true
+                }
+            }
+        }
+    }
+    
+    // NEW: Receipt prompt overlay
+    private var receiptPromptOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.8)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 30) {
+                // Receipt icon
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.2))
+                        .frame(width: 100, height: 100)
+                    
+                    Image(systemName: "envelope.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.blue)
+                }
+                
+                VStack(spacing: 16) {
+                    Text("Would you like a receipt?")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("We can email you a donation receipt for your tax records")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+                
+                VStack(spacing: 16) {
+                    // Yes button
+                    Button("Yes, send receipt") {
+                        showingReceiptPrompt = false
+                        showingEmailEntry = true
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .font(.headline)
+                    .cornerRadius(12)
+                    
+                    // No button
+                    Button("No thanks") {
+                        showingReceiptPrompt = false
+                        handleSuccessfulCompletion()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.clear)
+                    .foregroundColor(.white)
+                    .font(.headline)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                    )
+                }
+                .padding(.horizontal, 40)
+            }
+            .padding(40)
+        }
+    }
+    
+    // NEW: Email entry overlay
+    private var emailEntryOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.8)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 30) {
+                // Email icon
+                ZStack {
+                    Circle()
+                        .fill(Color.green.opacity(0.2))
+                        .frame(width: 100, height: 100)
+                    
+                    Image(systemName: "at")
+                        .font(.system(size: 40, weight: .medium))
+                        .foregroundColor(.green)
+                }
+                
+                VStack(spacing: 16) {
+                    Text("Enter your email")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text("We'll send your donation receipt to this email address")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+                
+                // Email input field
+                VStack(spacing: 12) {
+                    TextField("your.email@example.com", text: $emailAddress)
+                        .textFieldStyle(EmailTextFieldStyle())
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .onChange(of: emailAddress) { _, newValue in
+                            validateEmail(newValue)
+                        }
+                    
+                    if !emailAddress.isEmpty && !isEmailValid {
+                        Text("Please enter a valid email address")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 20)
+                    }
+                }
+                .padding(.horizontal, 40)
+                
+                VStack(spacing: 16) {
+                    // Send button
+                    Button(action: sendReceipt) {
+                        HStack {
+                            if isSendingReceipt {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.9)
+                                Text("Sending...")
+                            } else {
+                                Image(systemName: "paperplane.fill")
+                                Text("Send Receipt")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(isEmailValid && !isSendingReceipt ? Color.green : Color.gray)
+                        .foregroundColor(.white)
+                        .font(.headline)
+                        .cornerRadius(12)
+                    }
+                    .disabled(!isEmailValid || isSendingReceipt)
+                    
+                    // Back button
+                    Button("Back") {
+                        showingEmailEntry = false
+                        showingReceiptPrompt = true
+                        emailAddress = ""
+                        isEmailValid = false
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.clear)
+                    .foregroundColor(.white)
+                    .font(.headline)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                    )
+                    .disabled(isSendingReceipt)
+                }
+                .padding(.horizontal, 40)
+            }
+            .padding(40)
         }
     }
     
@@ -239,6 +528,7 @@ struct UpdatedCustomAmountView: View {
         impactFeedback.impactOccurred()
     }
     
+    // CHANGED: Process payment immediately instead of navigating to checkout
     private func handleDone() {
         print("✅ handleDone called with amountString: '\(amountString)'")
         
@@ -287,28 +577,145 @@ struct UpdatedCustomAmountView: View {
         }
         
         print("✅ Valid amount entered: $\(amount)")
-        print("🚀 Navigating to checkout...")
+        print("🚀 Processing payment immediately...")
         
         // Modern haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
-        // Store amount and navigate to checkout
+        // Store amount and process payment immediately
         selectedAmount = amount
-        navigateToCheckout = true
+        donationViewModel.selectedAmount = amount
+        donationViewModel.isCustomAmount = true
         
-        print("📤 Navigation initiated")
+        // Call the original callback for compatibility
+        onAmountSelected(amount)
+        
+        // Process payment immediately
+        processPayment(amount: amount, isCustomAmount: true)
     }
     
-    // 🆕 NEW: Handle navigation to home from checkout
-    private func handleNavigateToHome() {
-        print("🏠 Navigating to home from custom amount checkout")
+    // NEW: Process payment method
+    private func processPayment(amount: Double, isCustomAmount: Bool) {
+        // Check authentication
+        if !squareAuthService.isAuthenticated {
+            showingSquareAuth = true
+            return
+        }
         
-        // Reset states
-        navigateToCheckout = false
+        // Check reader connection - if no reader, silently go back to home
+        if !paymentService.isReaderConnected {
+            print("🔇 No reader connected - silently navigating to home")
+            handleSilentFailureOrCancellation()
+            return
+        }
         
-        // Navigate to home
+        resetPaymentState()
+        isProcessingPayment = true
+        
+        print("🚀 Starting payment processing for amount: $\(amount)")
+        print("💰 Is custom amount: \(isCustomAmount)")
+        
+        // Use the unified payment processing method from SquarePaymentService
+        paymentService.processPayment(
+            amount: amount,
+            orderId: nil,
+            isCustomAmount: isCustomAmount,
+            catalogItemId: nil, // Custom amounts don't have catalog items
+            allowOffline: true
+        ) { success, transactionId in
+            DispatchQueue.main.async {
+                // Always reset processing state first
+                self.isProcessingPayment = false
+                
+                if success {
+                    print("✅ Payment successful! Transaction ID: \(transactionId ?? "N/A")")
+                    
+                    // Record the donation
+                    self.donationViewModel.recordDonation(amount: amount, transactionId: transactionId)
+                    
+                    // Store IDs for display
+                    self.orderId = self.paymentService.currentOrderId
+                    self.paymentId = transactionId
+                    
+                    // Show success
+                    self.showingThankYou = true
+                } else {
+                    print("🚫 Payment cancelled or failed by user")
+                    // Don't navigate away immediately - let user see they're back to selection screen
+                    // Reset state but stay on this screen so user can try again or go back
+                    self.resetPaymentState()
+                    
+                    // Clear the amount string so user can enter a new amount
+                    self.amountString = ""
+                }
+            }
+        }
+    }
+    
+    // NEW: Silent handling of payment failures/cancellations
+    private func handleSilentFailureOrCancellation() {
+        print("🔇 Payment failed or cancelled - silently navigating to home")
+        
+        // Clear any error state
+        paymentService.paymentError = nil
+        
+        // Reset payment state
+        resetPaymentState()
+        
+        // Navigate directly to home
         navigateToHome = true
+    }
+    
+    private func handleSuccessfulCompletion() {
+        print("✅ Payment completed successfully - returning to home")
+        resetPaymentState()
+        navigateToHome = true
+    }
+    
+    private func resetPaymentState() {
+        isProcessingPayment = false
+        showingThankYou = false
+        showingReceiptPrompt = false
+        showingEmailEntry = false
+        orderId = nil
+        paymentId = nil
+        emailAddress = ""
+        isEmailValid = false
+        isSendingReceipt = false
+    }
+    
+    // NEW: Email validation
+    private func validateEmail(_ email: String) {
+        let emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
+        isEmailValid = emailPredicate.evaluate(with: email)
+    }
+    
+    // NEW: Send receipt
+    private func sendReceipt() {
+        guard isEmailValid && !emailAddress.isEmpty else { return }
+        
+        isSendingReceipt = true
+        print("📧 Sending receipt to: \(emailAddress)")
+        print("📧 Order ID: \(orderId ?? "N/A")")
+        print("📧 Payment ID: \(paymentId ?? "N/A")")
+        print("📧 Amount: $\(selectedAmount)")
+        
+        // TODO: Implement actual receipt sending with SendGrid
+        // For now, simulate sending delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            self.isSendingReceipt = false
+            self.showEmailSuccessAndComplete()
+        }
+    }
+    
+    // NEW: Show email success and complete
+    private func showEmailSuccessAndComplete() {
+        showingEmailEntry = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.handleSuccessfulCompletion()
+        }
     }
     
     // MARK: - Cute shake animation helper
@@ -379,5 +786,8 @@ struct UpdatedCustomAmountView_Previews: PreviewProvider {
             print("Preview: Selected amount \(amount)")
         }
         .environmentObject(KioskStore())
+        .environmentObject(DonationViewModel())
+        .environmentObject(SquareAuthService())
+        .environmentObject(SquarePaymentService(authService: SquareAuthService(), catalogService: SquareCatalogService(authService: SquareAuthService())))
     }
 }
