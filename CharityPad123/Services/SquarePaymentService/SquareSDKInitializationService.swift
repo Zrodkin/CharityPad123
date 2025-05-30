@@ -126,7 +126,10 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
                 onSuccess()
                 return
             } else {
-                print("⚠️ SDK authorized but with different location, re-authorizing...")
+                let currentLocationId = MobilePaymentsSDK.shared.authorizationManager.location?.id ?? "unknown"
+                print("⚠️ SDK authorized but with different location: \(currentLocationId) vs \(locationID)")
+                print("🔄 Re-authorizing with correct location...")
+                
                 // Deauthorize first, then re-authorize with correct location
                 MobilePaymentsSDK.shared.authorizationManager.deauthorize {
                     DispatchQueue.main.async {
@@ -141,7 +144,7 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
         performAuthorization(accessToken: accessToken, locationID: locationID, onSuccess: onSuccess)
     }
 
-    // MARK: - New helper method for cleaner authorization
+    // Enhanced helper method for cleaner authorization
     private func performAuthorization(accessToken: String, locationID: String, onSuccess: @escaping () -> Void) {
         print("🚀 Authorizing Square SDK with location ID: \(locationID)")
         
@@ -163,13 +166,17 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
                     if authError.localizedDescription.contains("location") ||
                        authError.localizedDescription.contains("Location") {
                         self.updatePaymentError("Invalid location selected - please reconnect to Square")
+                        print("❌ Location-specific error detected")
                     }
                     return
                 }
                 
                 // Success!
+                let currentLocation = MobilePaymentsSDK.shared.authorizationManager.location
                 print("✅ Square Mobile Payments SDK successfully authorized")
-                print("✅ Location: \(MobilePaymentsSDK.shared.authorizationManager.location?.name ?? "Unknown")")
+                print("✅ Location ID: \(currentLocation?.id ?? "Unknown")")
+                print("✅ Location Name: \(currentLocation?.name ?? "Unknown")")
+                
                 self.updateConnectionStatus("SDK authorized")
                 self.updatePaymentError(nil) // Clear any previous errors
                 onSuccess()

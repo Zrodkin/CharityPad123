@@ -226,7 +226,6 @@ class SquareAuthService: ObservableObject {
                 guard let self = self else { return }
                 
                 if let error = error {
-                    self.authError = "Network error: \(error.localizedDescription)"
                     print("Network error checking auth status: \(error)")
                     completion(false)
                     return
@@ -238,7 +237,6 @@ class SquareAuthService: ObservableObject {
                 }
                 
                 guard let data = data else {
-                    self.authError = "No data received from backend"
                     print("No data received from backend")
                     completion(false)
                     return
@@ -255,16 +253,16 @@ class SquareAuthService: ObservableObject {
                            let accessToken = json["access_token"] as? String,
                            let refreshToken = json["refresh_token"] as? String,
                            let merchantId = json["merchant_id"] as? String,
-                           let locationId = json["location_id"] as? String,
+                           let locationId = json["location_id"] as? String,  // CRITICAL: Get location_id
                            let expiresAt = json["expires_at"] as? String {
                             
                             // Store tokens
                             self.accessToken = accessToken
                             self.refreshToken = refreshToken
                             self.merchantId = merchantId
-                            self.locationId = locationId
-                            //self.organizationId = "org_\(merchantId)"
+                            self.locationId = locationId  // CRITICAL: Store location ID
                             
+                            print("✅ CRITICAL: Stored location ID: \(locationId)")
                             
                             // Parse expiration date
                             let dateFormatter = ISO8601DateFormatter()
@@ -281,7 +279,21 @@ class SquareAuthService: ObservableObject {
                             self.isAuthenticated = true
                             self.isAuthenticating = false
                             
-                            print("Square authentication successful!")
+                            print("✅ Square authentication successful with location!")
+                            print("📍 Location ID: \(locationId)")
+                            print("🏢 Merchant ID: \(merchantId)")
+                            
+                            // Post notification that authentication was successful
+                            NotificationCenter.default.post(
+                                name: .squareAuthenticationSuccessful,
+                                object: nil,
+                                userInfo: [
+                                    "accessToken": accessToken,
+                                    "merchantId": merchantId,
+                                    "locationId": locationId
+                                ]
+                            )
+                            
                             completion(true)
                             return
                         } else if let error = json["error"] as? String {
@@ -310,8 +322,6 @@ class SquareAuthService: ObservableObject {
                     completion(false)
                     
                 } catch {
-                    self.authError = "Failed to parse response: \(error.localizedDescription)"
-                    self.isAuthenticating = false
                     print("JSON parsing error: \(error)")
                     completion(false)
                 }
