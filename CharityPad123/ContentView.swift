@@ -19,7 +19,7 @@ struct ContentView: View {
                     .environmentObject(kioskStore)
                     .environmentObject(donationViewModel)
                     .environmentObject(squareAuthService)
-                    // Add reset logic when showing OnboardingView
+                // Add reset logic when showing OnboardingView
                     .onAppear {
                         // Reset any other state when showing onboarding
                         resetAppState()
@@ -44,10 +44,10 @@ struct ContentView: View {
             refreshTrigger.toggle()
         }
         .onAppear {
-            // Ensure we default to admin mode when app starts
-            if hasCompletedOnboarding {
-                isInAdminMode = true
-            }
+            // 🔧 FIX: REMOVED the problematic line that was forcing admin mode
+            // if hasCompletedOnboarding {
+            //     isInAdminMode = true
+            // }
             
             // Check if we're authenticated with Square
             squareAuthService.checkAuthentication()
@@ -61,13 +61,15 @@ struct ContentView: View {
         }
         // Add listener for authentication state changes
         .onChange(of: squareAuthService.isAuthenticated) { _, isAuthenticated in
+            print("🚨 AUTH STATE CHANGED: \(isAuthenticated)")
+            print("🚨 WHO CALLED THIS? \(Thread.callStackSymbols)")
+            
             if isAuthenticated {
                 // Initialize the SDK when authentication state changes to authenticated
                 squarePaymentService.initializeSDK()
             }
         }
     }
-    
     // Add a function to reset app state when needed
     private func resetAppState() {
         // Reset any in-memory state that might be causing issues

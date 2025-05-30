@@ -307,68 +307,73 @@ struct AdminDashboardView: View {
     // MARK: - 🔧 FIX 7: Improved Logout Methods with Better Error Handling
     
     private func initiateLogoutProcess() {
-        print("🔄 Starting logout process...")
-        
-        // Ensure we're on main thread and not already logging out
-        DispatchQueue.main.async {
-            guard !self.isLoggingOut else {
-                print("⚠️ Already logging out, skipping duplicate request")
-                return
-            }
+            print("🔄 Starting logout process...")
             
-            self.isLoggingOut = true
-            self.isProcessingLogout = true
+            // 🔧 FIX: Notify that this is an explicit logout
+            NotificationCenter.default.post(name: NSNotification.Name("ExplicitLogoutInitiated"), object: nil)
             
-            // 🔧 FIX 8: Use Task for better async handling
-            Task {
-                await self.performLogoutSequence()
-            }
-        }
-    }
-    
-    @MainActor
-    private func performLogoutSequence() async {
-        print("🔄 Performing logout sequence...")
-        
-        // Step 1: Deauthorize SDK if authenticated
-        if squareAuthService.isAuthenticated {
-            print("🔐 Deauthorizing Square SDK...")
-            await withCheckedContinuation { continuation in
-                squarePaymentService.deauthorizeSDK {
-                    print("✅ SDK deauthorization complete")
-                    continuation.resume()
+            // Ensure we're on main thread and not already logging out
+            DispatchQueue.main.async {
+                guard !self.isLoggingOut else {
+                    print("⚠️ Already logging out, skipping duplicate request")
+                    return
+                }
+                
+                self.isLoggingOut = true
+                self.isProcessingLogout = true
+                
+                // 🔧 FIX: Use Task for better async handling
+                Task {
+                    await self.performLogoutSequence()
                 }
             }
         }
         
-        // Step 2: Attempt server disconnect (non-blocking)
-        print("🌐 Attempting server disconnect...")
-        await withCheckedContinuation { continuation in
-            squareAuthService.disconnectFromServer { success in
-                print("🌐 Server disconnect result: \(success)")
-                continuation.resume()
+        @MainActor
+        private func performLogoutSequence() async {
+            print("🔄 Performing logout sequence...")
+            
+            // Step 1: Deauthorize SDK if authenticated
+            if squareAuthService.isAuthenticated {
+                print("🔐 Deauthorizing Square SDK...")
+                await withCheckedContinuation { continuation in
+                    squarePaymentService.deauthorizeSDK {
+                        print("✅ SDK deauthorization complete")
+                        continuation.resume()
+                    }
+                }
             }
+            
+            // Step 2: Attempt server disconnect (non-blocking)
+            print("🌐 Attempting server disconnect...")
+            await withCheckedContinuation { continuation in
+                squareAuthService.disconnectFromServer { success in
+                    print("🌐 Server disconnect result: \(success)")
+                    continuation.resume()
+                }
+            }
+            
+            // Step 3: Clean up local state
+            print("🧹 Cleaning up local state...")
+            squareReaderService.stopMonitoring()
+            donationViewModel.resetDonation()
+            squareAuthService.clearLocalAuthData()
+            
+            // Step 4: Final UI state updates with proper timing
+            print("🎯 Updating final UI state...")
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
+            
+            // 🔧 FIX: Explicitly reset onboarding state for logout
+            UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+            self.isInAdminMode = true
+            
+            // Reset all logout states
+            self.isLoggingOut = false
+            self.isProcessingLogout = false
+            
+            print("✅ Logout process complete!")
         }
-        
-        // Step 3: Clean up local state
-        print("🧹 Cleaning up local state...")
-        squareReaderService.stopMonitoring()
-        donationViewModel.resetDonation()
-        squareAuthService.clearLocalAuthData()
-        
-        // Step 4: Final UI state updates with proper timing
-        print("🎯 Updating final UI state...")
-        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
-        
-        self.isInAdminMode = true
-        UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
-        
-        // Reset all logout states
-        self.isLoggingOut = false
-        self.isProcessingLogout = false
-        
-        print("✅ Logout process complete!")
-    }
+    
     
     // 🔧 FIX 9: Fallback cleanup method (keeping original structure as backup)
     private func attemptServerDisconnect() {

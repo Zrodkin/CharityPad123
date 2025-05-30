@@ -24,6 +24,13 @@ struct CheckoutView: View {
     @State private var orderId: String? = nil
     @State private var paymentId: String? = nil
     
+    // 🆕 Receipt functionality
+    @State private var showingReceiptPrompt = false
+    @State private var showingEmailEntry = false
+    @State private var emailAddress = ""
+    @State private var isEmailValid = false
+    @State private var isSendingReceipt = false
+    
     // Processing state enum
     enum ProcessingState {
         case ready
@@ -95,7 +102,8 @@ struct CheckoutView: View {
                     
                     // Cancel button
                     Button("Cancel") {
-                        onDismiss()
+                        // 🔧 FIX: Notify that payment flow is ending when canceling
+                        handleCancel()
                     }
                     .foregroundColor(.white)
                     .padding()
@@ -116,12 +124,23 @@ struct CheckoutView: View {
             if showingError {
                 errorOverlay
             }
+            
+            // 🆕 Receipt prompt overlay
+            if showingReceiptPrompt {
+                receiptPromptOverlay
+            }
+            
+            // 🆕 Email entry overlay
+            if showingEmailEntry {
+                emailEntryOverlay
+            }
         }
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
-                    onDismiss()
+                    // 🔧 FIX: Handle back button properly
+                    handleCancel()
                 }) {
                     Image(systemName: "chevron.left")
                         .foregroundColor(.white)
@@ -131,9 +150,18 @@ struct CheckoutView: View {
             }
         }
         .onAppear {
+            // 🔧 FIX: Notify that payment flow has started
+            print("🎯 CheckoutView appeared - starting payment flow")
+            NotificationCenter.default.post(name: NSNotification.Name("PaymentFlowStarted"), object: nil)
+            
             if !paymentService.isReaderConnected {
                 paymentService.connectToReader()
             }
+        }
+        .onDisappear {
+            // 🔧 FIX: Always notify when leaving checkout, regardless of how
+            print("🎯 CheckoutView disappeared - ending payment flow")
+            NotificationCenter.default.post(name: NSNotification.Name("PaymentFlowEnded"), object: nil)
         }
         .onReceive(paymentService.$paymentError) { error in
             if error != nil {
@@ -278,7 +306,9 @@ struct CheckoutView: View {
                 }
                 
                 Button("Done") {
-                    onDismiss()
+                    // 🆕 Show receipt prompt instead of immediate completion
+                    showingThankYou = false
+                    showingReceiptPrompt = true
                 }
                 .padding(.horizontal, 40)
                 .padding(.vertical, 10)
@@ -291,7 +321,11 @@ struct CheckoutView: View {
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                onDismiss()
+                // 🆕 Show receipt prompt instead of auto-completion
+                if showingThankYou {
+                    showingThankYou = false
+                    showingReceiptPrompt = true
+                }
             }
         }
     }
@@ -329,6 +363,171 @@ struct CheckoutView: View {
         }
     }
     
+    // 🆕 Receipt prompt overlay
+    private var receiptPromptOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.8)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 30) {
+                // Receipt icon
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.2))
+                        .frame(width: 100, height: 100)
+                    
+                    Image(systemName: "envelope.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.blue)
+                }
+                
+                VStack(spacing: 16) {
+                    Text("Would you like a receipt?")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("We can email you a donation receipt for your tax records")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+                
+                VStack(spacing: 16) {
+                    // Yes button
+                    Button("Yes, send receipt") {
+                        showingReceiptPrompt = false
+                        showingEmailEntry = true
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .font(.headline)
+                    .cornerRadius(12)
+                    
+                    // No button
+                    Button("No thanks") {
+                        showingReceiptPrompt = false
+                        handleSuccessfulCompletion()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.clear)
+                    .foregroundColor(.white)
+                    .font(.headline)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                    )
+                }
+                .padding(.horizontal, 40)
+            }
+            .padding(40)
+        }
+    }
+    
+    // 🆕 Email entry overlay
+    private var emailEntryOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.8)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 30) {
+                // Email icon
+                ZStack {
+                    Circle()
+                        .fill(Color.green.opacity(0.2))
+                        .frame(width: 100, height: 100)
+                    
+                    Image(systemName: "at")
+                        .font(.system(size: 40, weight: .medium))
+                        .foregroundColor(.green)
+                }
+                
+                VStack(spacing: 16) {
+                    Text("Enter your email")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text("We'll send your donation receipt to this email address")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+                
+                // Email input field
+                VStack(spacing: 12) {
+                    TextField("your.email@example.com", text: $emailAddress)
+                        .textFieldStyle(EmailTextFieldStyle())
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .onChange(of: emailAddress) { _, newValue in
+                            validateEmail(newValue)
+                        }
+                    
+                    if !emailAddress.isEmpty && !isEmailValid {
+                        Text("Please enter a valid email address")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 20)
+                    }
+                }
+                .padding(.horizontal, 40)
+                
+                VStack(spacing: 16) {
+                    // Send button
+                    Button(action: sendReceipt) {
+                        HStack {
+                            if isSendingReceipt {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.9)
+                                Text("Sending...")
+                            } else {
+                                Image(systemName: "paperplane.fill")
+                                Text("Send Receipt")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(isEmailValid && !isSendingReceipt ? Color.green : Color.gray)
+                        .foregroundColor(.white)
+                        .font(.headline)
+                        .cornerRadius(12)
+                    }
+                    .disabled(!isEmailValid || isSendingReceipt)
+                    
+                    // Back button
+                    Button("Back") {
+                        showingEmailEntry = false
+                        showingReceiptPrompt = true
+                        emailAddress = ""
+                        isEmailValid = false
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.clear)
+                    .foregroundColor(.white)
+                    .font(.headline)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                    )
+                    .disabled(isSendingReceipt)
+                }
+                .padding(.horizontal, 40)
+            }
+            .padding(40)
+        }
+    }
+    
     // MARK: - Helper Methods
     
     private func formatAmount(_ amount: Double) -> String {
@@ -336,6 +535,25 @@ struct CheckoutView: View {
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         return formatter.string(from: NSNumber(value: amount)) ?? "$\(amount)"
+    }
+    
+    // 🔧 FIX: New method to handle cancellation properly
+    private func handleCancel() {
+        print("🚫 Payment cancelled by user")
+        
+        // Reset any payment state
+        resetPaymentState()
+        
+        // Call the onDismiss callback
+        onDismiss()
+    }
+    
+    // 🔧 FIX: New method to handle successful completion
+    private func handleSuccessfulCompletion() {
+        print("✅ Payment completed successfully")
+        
+        // Call the onDismiss callback
+        onDismiss()
     }
     
     private func processPayment() {
@@ -402,8 +620,66 @@ struct CheckoutView: View {
         processingState = .ready
         showingError = false
         showingThankYou = false
+        showingReceiptPrompt = false
+        showingEmailEntry = false
         orderId = nil
         paymentId = nil
+        emailAddress = ""
+        isEmailValid = false
+        isSendingReceipt = false
+    }
+    
+    // 🆕 Email validation
+    private func validateEmail(_ email: String) {
+        let emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
+        isEmailValid = emailPredicate.evaluate(with: email)
+    }
+    
+    // 🆕 Send receipt (placeholder for backend integration)
+    private func sendReceipt() {
+        guard isEmailValid && !emailAddress.isEmpty else { return }
+        
+        isSendingReceipt = true
+        print("📧 Sending receipt to: \(emailAddress)")
+        print("📧 Order ID: \(orderId ?? "N/A")")
+        print("📧 Payment ID: \(paymentId ?? "N/A")")
+        print("📧 Amount: $\(amount)")
+        
+        // TODO: Implement actual receipt sending with SendGrid
+        // For now, simulate sending delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            self.isSendingReceipt = false
+            
+            // Show success message briefly
+            self.showEmailSuccessAndComplete()
+        }
+    }
+    
+    // 🆕 Show email success and complete
+    private func showEmailSuccessAndComplete() {
+        // Create a temporary success view
+        showingEmailEntry = false
+        
+        // Show a brief success message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.handleSuccessfulCompletion()
+        }
+    }
+}
+
+// 🆕 Custom text field style for email input
+struct EmailTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .font(.title3)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white)
+            )
+            .foregroundColor(.black)
     }
 }
 
