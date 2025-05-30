@@ -4,7 +4,7 @@ struct UpdatedCustomAmountView: View {
     @EnvironmentObject var kioskStore: KioskStore
     @EnvironmentObject var donationViewModel: DonationViewModel
     @EnvironmentObject var squareAuthService: SquareAuthService
-    @EnvironmentObject var paymentService: SquarePaymentService // Add payment service
+    @EnvironmentObject var paymentService: SquarePaymentService
     @Environment(\.dismiss) private var dismiss
     @State private var amountString: String = ""
     @State private var errorMessage: String? = nil
@@ -13,7 +13,7 @@ struct UpdatedCustomAmountView: View {
     @State private var navigateToHome = false
     @State private var selectedAmount: Double = 0
     
-    // NEW: Add payment processing states (only what we need)
+    // Payment processing states
     @State private var isProcessingPayment = false
     @State private var showingSquareAuth = false
     @State private var showingThankYou = false
@@ -25,7 +25,7 @@ struct UpdatedCustomAmountView: View {
     @State private var orderId: String? = nil
     @State private var paymentId: String? = nil
     
-    // Callback for when amount is selected (keeping for compatibility)
+    // Callback for when amount is selected
     var onAmountSelected: (Double) -> Void
     
     var body: some View {
@@ -48,7 +48,6 @@ struct UpdatedCustomAmountView: View {
             Color.black.opacity(0.55)
                 .edgesIgnoringSafeArea(.all)
             
-            // CONSISTENT: Same layout structure as other views
             VStack(spacing: 0) {
                 Spacer()
                     .frame(height: KioskLayoutConstants.topContentOffset)
@@ -128,7 +127,7 @@ struct UpdatedCustomAmountView: View {
                             handleNumberPress("0")
                         }
                         
-                        // CHANGED: Process Payment button instead of Next
+                        // Process Payment button
                         Button(action: {
                             handleDone()
                         }) {
@@ -158,22 +157,22 @@ struct UpdatedCustomAmountView: View {
                     .frame(height: KioskLayoutConstants.bottomSafeArea)
             }
             
-            // NEW: Payment processing overlay
+            // Payment processing overlay
             if isProcessingPayment {
                 paymentProcessingOverlay
             }
             
-            // NEW: Success overlay
-            if showingThankYou {
-                thankYouOverlay
-            }
+            // Success overlay - DISABLED FOR DEBUGGING
+            // if showingThankYou {
+            //     thankYouOverlay
+            // }
             
-            // NEW: Receipt prompt overlay
+            // Receipt prompt overlay
             if showingReceiptPrompt {
                 receiptPromptOverlay
             }
             
-            // NEW: Email entry overlay
+            // Email entry overlay
             if showingEmailEntry {
                 emailEntryOverlay
             }
@@ -192,15 +191,9 @@ struct UpdatedCustomAmountView: View {
             }
         }
         .onAppear {
-            print("📱 UpdatedCustomAmountView appeared")
-            
-            // Connect to reader if not already connected
             if !paymentService.isReaderConnected {
                 paymentService.connectToReader()
             }
-        }
-        .onDisappear {
-            print("📱 UpdatedCustomAmountView disappeared")
         }
         .navigationDestination(isPresented: $navigateToCheckout) {
             CheckoutView(
@@ -215,21 +208,27 @@ struct UpdatedCustomAmountView: View {
             )
         }
         .navigationDestination(isPresented: $navigateToHome) {
-            HomeView()
-                .navigationBarBackButtonHidden(true)
+            // DON'T create a new HomeView - this causes navigation stack conflicts!
+            // Instead, this should pop back to root
+            EmptyView()
         }
         .sheet(isPresented: $showingSquareAuth) {
             SquareAuthorizationView()
         }
-        // NEW: Monitor payment processing
         .onReceive(paymentService.$isProcessingPayment) { processing in
+            print("🔄 onReceive: processing=\(processing), isProcessingPayment=\(isProcessingPayment)")
             if !processing && isProcessingPayment {
-                print("🔄 Payment processing state changed to: \(processing)")
+                print("🔄 onReceive: Payment stopped, dismissing back to home")
+                // Use dismiss instead of navigation to prevent stack conflicts
+                self.resetPaymentState()
+                self.dismiss()
+                self.dismiss() // Go back through DonationSelectionView to HomeView
             }
         }
     }
     
-    // NEW: Payment processing overlay
+    // MARK: - UI Overlays
+    
     private var paymentProcessingOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -255,7 +254,6 @@ struct UpdatedCustomAmountView: View {
         }
     }
     
-    // NEW: Thank you overlay (copied from DonationSelectionView)
     private var thankYouOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -309,14 +307,12 @@ struct UpdatedCustomAmountView: View {
         }
     }
     
-    // NEW: Receipt prompt overlay (copied from DonationSelectionView)
     private var receiptPromptOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
                 .edgesIgnoringSafeArea(.all)
             
             VStack(spacing: 30) {
-                // Receipt icon
                 ZStack {
                     Circle()
                         .fill(Color.blue.opacity(0.2))
@@ -342,7 +338,6 @@ struct UpdatedCustomAmountView: View {
                 }
                 
                 VStack(spacing: 16) {
-                    // Yes button
                     Button("Yes, send receipt") {
                         showingReceiptPrompt = false
                         showingEmailEntry = true
@@ -354,7 +349,6 @@ struct UpdatedCustomAmountView: View {
                     .font(.headline)
                     .cornerRadius(12)
                     
-                    // No button
                     Button("No thanks") {
                         showingReceiptPrompt = false
                         handleSuccessfulCompletion()
@@ -375,14 +369,12 @@ struct UpdatedCustomAmountView: View {
         }
     }
     
-    // NEW: Email entry overlay (copied from DonationSelectionView)
     private var emailEntryOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
                 .edgesIgnoringSafeArea(.all)
             
             VStack(spacing: 30) {
-                // Email icon
                 ZStack {
                     Circle()
                         .fill(Color.green.opacity(0.2))
@@ -406,7 +398,6 @@ struct UpdatedCustomAmountView: View {
                         .padding(.horizontal, 20)
                 }
                 
-                // Email input field
                 VStack(spacing: 12) {
                     TextField("your.email@example.com", text: $emailAddress)
                         .textFieldStyle(EmailTextFieldStyle())
@@ -428,7 +419,6 @@ struct UpdatedCustomAmountView: View {
                 .padding(.horizontal, 40)
                 
                 VStack(spacing: 16) {
-                    // Send button
                     Button(action: sendReceipt) {
                         HStack {
                             if isSendingReceipt {
@@ -450,7 +440,6 @@ struct UpdatedCustomAmountView: View {
                     }
                     .disabled(!isEmailValid || isSendingReceipt)
                     
-                    // Back button
                     Button("Back") {
                         showingEmailEntry = false
                         showingReceiptPrompt = true
@@ -479,12 +468,10 @@ struct UpdatedCustomAmountView: View {
     private func handleNumberPress(_ num: String) {
         let maxDigits = 7
         
-        // Prevent leading zeros
         if amountString.isEmpty && num == "0" {
             return
         }
         
-        // Check if adding this number would exceed maximum
         let tempAmount = amountString + num
         if let amount = Double(tempAmount),
            let maxAmount = Double(kioskStore.maxAmount) {
@@ -493,7 +480,6 @@ struct UpdatedCustomAmountView: View {
                     errorMessage = "Maximum amount is $\(Int(maxAmount))"
                 }
                 
-                // Clear error after 3 seconds
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         errorMessage = nil
@@ -503,20 +489,16 @@ struct UpdatedCustomAmountView: View {
             }
         }
         
-        // Add the number if under max digits
         if amountString.count < maxDigits {
             amountString += num
-            print("💰 Amount updated to: \(amountString)")
         }
         
-        // Clear any existing error (with animation)
         if errorMessage != nil {
             withAnimation(.easeInOut(duration: 0.3)) {
                 errorMessage = nil
             }
         }
         
-        // Modern haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
     }
@@ -524,99 +506,78 @@ struct UpdatedCustomAmountView: View {
     private func handleDelete() {
         if !amountString.isEmpty {
             amountString.removeLast()
-            print("🗑️ Amount after delete: \(amountString)")
         }
         
-        // Clear any existing error (with animation)
         if errorMessage != nil {
             withAnimation(.easeInOut(duration: 0.3)) {
                 errorMessage = nil
             }
         }
         
-        // Modern haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
     }
     
-    // CHANGED: Process payment immediately instead of navigating to checkout
     private func handleDone() {
-        print("✅ handleDone called with amountString: '\(amountString)'")
+        guard !isProcessingPayment else {
+            return
+        }
         
-        // Convert amount to Double
         guard let amount = Double(amountString), amount > 0 else {
-            // Cute shake animation for $0 or empty amount! 🎯
             if amountString.isEmpty {
-                print("💫 Triggering cute shake animation for $0")
                 withAnimation(.interpolatingSpring(stiffness: 600, damping: 5)) {
                     shakeAmount()
                 }
                 
-                // Add a playful haptic pattern
                 let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                 impactFeedback.impactOccurred()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     impactFeedback.impactOccurred()
                 }
                 
-                return // Don't show error message, just the cute shake
+                return
             } else {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     errorMessage = "Please enter a valid amount"
                 }
             }
-            print("❌ Invalid amount entered: '\(amountString)'")
             return
         }
         
-        // Check minimum amount
         if let minAmount = Double(kioskStore.minAmount), amount < minAmount {
             withAnimation(.easeInOut(duration: 0.3)) {
                 errorMessage = "Minimum amount is $\(Int(minAmount))"
             }
-            print("❌ Amount below minimum: \(amount) < \(minAmount)")
             return
         }
         
-        // Check maximum amount
         if let maxAmount = Double(kioskStore.maxAmount), amount > maxAmount {
             withAnimation(.easeInOut(duration: 0.3)) {
                 errorMessage = "Maximum amount is $\(Int(maxAmount))"
             }
-            print("❌ Amount above maximum: \(amount) > \(maxAmount)")
             return
         }
         
-        print("✅ Valid amount entered: $\(amount)")
-        print("🚀 Processing payment immediately...")
-        
-        // Modern haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
-        // Store amount and process payment immediately
         selectedAmount = amount
         donationViewModel.selectedAmount = amount
         donationViewModel.isCustomAmount = true
         
-        // Call the original callback for compatibility
         onAmountSelected(amount)
         
-        // Process payment immediately
         processPayment(amount: amount, isCustomAmount: true)
     }
     
-    // NEW: Process payment method
+    // MAIN DEBUG METHOD - This is where the debug alert will show
     private func processPayment(amount: Double, isCustomAmount: Bool) {
-        // Check authentication
         if !squareAuthService.isAuthenticated {
             showingSquareAuth = true
             return
         }
         
-        // Check reader connection - if no reader, silently go back to home
         if !paymentService.isReaderConnected {
-            print("🔇 No reader connected - silently navigating to home")
             handleSilentFailureOrCancellation()
             return
         }
@@ -624,73 +585,56 @@ struct UpdatedCustomAmountView: View {
         resetPaymentState()
         isProcessingPayment = true
         
-        print("🚀 Starting payment processing for amount: $\(amount)")
-        print("💰 Is custom amount: \(isCustomAmount)")
-        
-        // Use the unified payment processing method from SquarePaymentService
         paymentService.processPayment(
             amount: amount,
             orderId: nil,
             isCustomAmount: isCustomAmount,
-            catalogItemId: nil, // Custom amounts don't have catalog items
+            catalogItemId: nil,
             allowOffline: true
         ) { success, transactionId in
+            print("🎯 Completion handler: success=\(success), transactionId=\(transactionId ?? "nil")")
+            // Handle success in completion handler since onReceive always goes home
             DispatchQueue.main.async {
-                // Always reset processing state first
+                print("🔄 Setting isProcessingPayment = false")
                 self.isProcessingPayment = false
                 
                 if success {
-                    print("✅ Payment successful! Transaction ID: \(transactionId ?? "N/A")")
-                    
-                    // Record the donation
+                    print("✅ Success path: Recording donation and showing thank you")
+                    // Record the donation and show success briefly before going home
                     self.donationViewModel.recordDonation(amount: amount, transactionId: transactionId)
-                    
-                    // Store IDs for display
                     self.orderId = self.paymentService.currentOrderId
                     self.paymentId = transactionId
                     
-                    // Show success
+                    // Show success for 2 seconds then go home
                     self.showingThankYou = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        self.resetPaymentState()
+                        self.navigateToHome = true
+                    }
                 } else {
-                    print("🚫 Payment cancelled or failed by user")
-                    // Don't navigate away immediately - let user see they're back to selection screen
-                    // Reset state but stay on this screen so user can try again or go back
-                    self.resetPaymentState()
-                    
-                    // Clear the amount string so user can enter a new amount
-                    self.amountString = ""
+                    print("❌ Failure path: Should let onReceive handle going home")
                 }
+                // If not success, onReceive will handle going home
             }
         }
     }
     
-    // NEW: Handle navigation to home from checkout
     private func handleNavigateToHome() {
-        print("🏠 Navigating to home from custom amount checkout")
-        
-        // Reset states
-        navigateToCheckout = false
-        
-        // Navigate to home
-        navigateToHome = true
+        // Instead of navigating to a new HomeView, dismiss back to the root
+        // This prevents navigation stack conflicts
+        dismiss()
+        dismiss() // Call twice to go back through DonationSelectionView to HomeView
     }
     
-    // NEW: Silent handling of payment failures/cancellations
     private func handleSilentFailureOrCancellation() {
-        print("🔇 Payment failed or cancelled - silently navigating to home")
-        
-        // Clear any error state
         paymentService.paymentError = nil
-        
-        // Reset payment state
         resetPaymentState()
-        
-        // Navigate directly to home
-        navigateToHome = true
+        // Use dismiss instead of navigation to prevent stack conflicts
+        dismiss()
+        dismiss() // Go back through DonationSelectionView to HomeView
     }
     
     private func handleSuccessfulCompletion() {
-        print("✅ Payment completed successfully - returning to home")
         resetPaymentState()
         navigateToHome = true
     }
@@ -707,32 +651,23 @@ struct UpdatedCustomAmountView: View {
         isSendingReceipt = false
     }
     
-    // NEW: Email validation (copied from CheckoutView)
     private func validateEmail(_ email: String) {
         let emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
         let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
         isEmailValid = emailPredicate.evaluate(with: email)
     }
     
-    // NEW: Send receipt (copied from CheckoutView)
     private func sendReceipt() {
         guard isEmailValid && !emailAddress.isEmpty else { return }
         
         isSendingReceipt = true
-        print("📧 Sending receipt to: \(emailAddress)")
-        print("📧 Order ID: \(orderId ?? "N/A")")
-        print("📧 Payment ID: \(paymentId ?? "N/A")")
-        print("📧 Amount: $\(selectedAmount)")
         
-        // TODO: Implement actual receipt sending with SendGrid
-        // For now, simulate sending delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             self.isSendingReceipt = false
             self.showEmailSuccessAndComplete()
         }
     }
     
-    // NEW: Show email success and complete
     private func showEmailSuccessAndComplete() {
         showingEmailEntry = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -740,7 +675,6 @@ struct UpdatedCustomAmountView: View {
         }
     }
     
-    // MARK: - Cute shake animation helper
     private func shakeAmount() {
         let shakeSequence: [CGFloat] = [0, -8, 8, -6, 6, -4, 4, -2, 2, 0]
         
@@ -752,7 +686,7 @@ struct UpdatedCustomAmountView: View {
     }
 }
 
-// MARK: - Keypad Button Component (old design with modern touch feedback)
+// MARK: - Supporting Components
 
 struct KeypadButton: View {
     let number: Int
@@ -761,10 +695,8 @@ struct KeypadButton: View {
     
     var body: some View {
         Button(action: {
-            // Modern haptic feedback
             let impactFeedback = UIImpactFeedbackGenerator(style: .light)
             impactFeedback.impactOccurred()
-            
             action()
         }) {
             VStack(spacing: 2) {
@@ -789,8 +721,6 @@ struct KeypadButton: View {
     }
 }
 
-// MARK: - Modern Button Style
-
 struct KeypadButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -800,9 +730,6 @@ struct KeypadButtonStyle: ButtonStyle {
     }
 }
 
-// EmailTextFieldStyle is already defined in DonationSelectionView.swift to avoid redeclaration
-
-// MARK: - Preview
 
 struct UpdatedCustomAmountView_Previews: PreviewProvider {
     static var previews: some View {

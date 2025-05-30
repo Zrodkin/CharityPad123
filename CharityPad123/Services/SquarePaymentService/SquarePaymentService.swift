@@ -436,10 +436,26 @@ extension SquarePaymentService: PaymentManagerDelegate {
             self.paymentError = nil
             self.connectionStatus = "Payment completed"
             
-            print("Payment successful with ID: \(String(describing: payment.id))")
+            print("✅ Payment successful with ID: \(String(describing: payment.id))")
             
-            // Handle completion
+            // Handle successful completion
             self.mainPaymentCompletion?(true, payment.id)
+            self.mainPaymentCompletion = nil
+        }
+    }
+    
+    func paymentManager(_ paymentManager: PaymentManager, didCancel payment: Payment) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.isProcessingPayment = false
+            self.paymentError = nil // Don't set this as an error
+            self.connectionStatus = "Payment cancelled"
+            
+            print("🚫 Payment was cancelled by user")
+            
+            // Handle cancellation - return false for success, nil for transaction ID
+            self.mainPaymentCompletion?(false, nil)
             self.mainPaymentCompletion = nil
         }
     }
@@ -452,27 +468,20 @@ extension SquarePaymentService: PaymentManagerDelegate {
             self.paymentError = "Payment failed: \(error.localizedDescription)"
             self.connectionStatus = "Payment failed"
             
-            print("Payment failed: \(error.localizedDescription)")
+            print("❌ Payment failed: \(error.localizedDescription)")
             
-            // Handle completion
+            // Handle failure
             self.mainPaymentCompletion?(false, nil)
             self.mainPaymentCompletion = nil
         }
     }
     
-    func paymentManager(_ paymentManager: PaymentManager, didCancel payment: Payment) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            self.isProcessingPayment = false
-            self.paymentError = "Payment was canceled"
-            self.connectionStatus = "Payment canceled"
-            
-            print("Payment was canceled by user")
-            
-            // Handle completion
-            self.mainPaymentCompletion?(false, nil)
-            self.mainPaymentCompletion = nil
-        }
+    // Optional methods
+    func paymentManager(_ paymentManager: PaymentManager, willCancel payment: Payment) {
+        print("Payment will cancel - preparing UI")
+    }
+    
+    func paymentManager(_ paymentManager: PaymentManager, willFinish payment: Payment) {
+        print("Payment will finish - preparing UI")
     }
 }
