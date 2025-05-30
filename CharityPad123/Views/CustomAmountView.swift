@@ -9,9 +9,11 @@ struct UpdatedCustomAmountView: View {
     @State private var amountString: String = ""
     @State private var errorMessage: String? = nil
     @State private var shakeOffset: CGFloat = 0
+    @State private var navigateToCheckout = false
     @State private var navigateToHome = false
+    @State private var selectedAmount: Double = 0
     
-    // NEW: Add payment processing states
+    // NEW: Add payment processing states (only what we need)
     @State private var isProcessingPayment = false
     @State private var showingSquareAuth = false
     @State private var showingThankYou = false
@@ -22,7 +24,6 @@ struct UpdatedCustomAmountView: View {
     @State private var isSendingReceipt = false
     @State private var orderId: String? = nil
     @State private var paymentId: String? = nil
-    @State private var selectedAmount: Double = 0
     
     // Callback for when amount is selected (keeping for compatibility)
     var onAmountSelected: (Double) -> Void
@@ -201,6 +202,18 @@ struct UpdatedCustomAmountView: View {
         .onDisappear {
             print("📱 UpdatedCustomAmountView disappeared")
         }
+        .navigationDestination(isPresented: $navigateToCheckout) {
+            CheckoutView(
+                amount: selectedAmount,
+                isCustomAmount: true,
+                onDismiss: {
+                    navigateToCheckout = false
+                },
+                onNavigateToHome: {
+                    handleNavigateToHome()
+                }
+            )
+        }
         .navigationDestination(isPresented: $navigateToHome) {
             HomeView()
                 .navigationBarBackButtonHidden(true)
@@ -211,8 +224,6 @@ struct UpdatedCustomAmountView: View {
         // NEW: Monitor payment processing
         .onReceive(paymentService.$isProcessingPayment) { processing in
             if !processing && isProcessingPayment {
-                // Payment finished - but let the completion handler deal with the result
-                // Don't immediately handle the result here to avoid interfering with Square UI
                 print("🔄 Payment processing state changed to: \(processing)")
             }
         }
@@ -244,7 +255,7 @@ struct UpdatedCustomAmountView: View {
         }
     }
     
-    // NEW: Thank you overlay
+    // NEW: Thank you overlay (copied from DonationSelectionView)
     private var thankYouOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -298,7 +309,7 @@ struct UpdatedCustomAmountView: View {
         }
     }
     
-    // NEW: Receipt prompt overlay
+    // NEW: Receipt prompt overlay (copied from DonationSelectionView)
     private var receiptPromptOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -364,7 +375,7 @@ struct UpdatedCustomAmountView: View {
         }
     }
     
-    // NEW: Email entry overlay
+    // NEW: Email entry overlay (copied from DonationSelectionView)
     private var emailEntryOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -653,6 +664,17 @@ struct UpdatedCustomAmountView: View {
         }
     }
     
+    // NEW: Handle navigation to home from checkout
+    private func handleNavigateToHome() {
+        print("🏠 Navigating to home from custom amount checkout")
+        
+        // Reset states
+        navigateToCheckout = false
+        
+        // Navigate to home
+        navigateToHome = true
+    }
+    
     // NEW: Silent handling of payment failures/cancellations
     private func handleSilentFailureOrCancellation() {
         print("🔇 Payment failed or cancelled - silently navigating to home")
@@ -685,14 +707,14 @@ struct UpdatedCustomAmountView: View {
         isSendingReceipt = false
     }
     
-    // NEW: Email validation
+    // NEW: Email validation (copied from CheckoutView)
     private func validateEmail(_ email: String) {
         let emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
         let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
         isEmailValid = emailPredicate.evaluate(with: email)
     }
     
-    // NEW: Send receipt
+    // NEW: Send receipt (copied from CheckoutView)
     private func sendReceipt() {
         guard isEmailValid && !emailAddress.isEmpty else { return }
         
@@ -777,6 +799,8 @@ struct KeypadButtonStyle: ButtonStyle {
             .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
+
+// EmailTextFieldStyle is already defined in DonationSelectionView.swift to avoid redeclaration
 
 // MARK: - Preview
 
