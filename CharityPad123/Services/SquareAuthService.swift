@@ -363,13 +363,15 @@ class SquareAuthService: ObservableObject {
         }
     }
     
+    // Add this method to SquareAuthService.swift
+
     func startPollingForAuthStatus(merchantId: String? = nil, locationId: String? = nil) {
         print("Starting to poll for authentication status with state: \(pendingAuthState ?? "nil")")
         
         // Add more debug output
         if pendingAuthState == nil {
             print("ERROR: pendingAuthState is nil - polling will not work")
-            return // Add return to prevent invalid polling
+            return
         }
         
         // Store merchant ID if provided
@@ -435,16 +437,26 @@ class SquareAuthService: ObservableObject {
                     
                     do {
                         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                            
+                            // ✅ CHECK FOR FINAL SUCCESS (tokens + location selected)
                             if let connected = json["connected"] as? Bool, connected,
                                let accessToken = json["access_token"] as? String,
                                let refreshToken = json["refresh_token"] as? String,
                                let merchantId = json["merchant_id"] as? String,
+                               let locationId = json["location_id"] as? String,
                                let expiresAt = json["expires_at"] as? String {
+                                
+                                print("🎉 FINAL SUCCESS - STORING TOKENS")
+                                print("📍 Location ID: \(locationId)")
                                 
                                 // Authentication successful - store tokens
                                 self.accessToken = accessToken
                                 self.refreshToken = refreshToken
                                 self.merchantId = merchantId
+                                self.locationId = locationId
+                                
+                                // Force synchronization
+                                UserDefaults.standard.synchronize()
                                 
                                 // Parse expiration date
                                 let dateFormatter = ISO8601DateFormatter()
@@ -464,15 +476,51 @@ class SquareAuthService: ObservableObject {
                                     object: nil,
                                     userInfo: [
                                         "accessToken": accessToken,
-                                        "merchantId": merchantId
+                                        "merchantId": merchantId,
+                                        "locationId": locationId
                                     ]
                                 )
                                 
                                 print("Authentication successful! Tokens stored.")
                                 timer.invalidate()
-                            } else if let message = json["message"] as? String {
-                                // Still waiting for authorization
-                                print("Polling status: \(message)")
+                                return
+                            }
+                            
+                            // ✅ CHECK FOR LOCATION SELECTION REQUIRED
+                            else if let message = json["message"] as? String,
+                                    message == "location_selection_required" {
+                                
+                                print("🏪 Multiple locations found - need user selection")
+                                print("📱 This should be handled by web UI, continuing to poll...")
+                                
+                                // Continue polling - user will select location in web UI
+                                // and that will update the state with location_id
+                                
+                                return // Continue polling
+                            }
+                            
+                            // ✅ CHECK FOR AUTHORIZATION IN PROGRESS
+                            else if let message = json["message"] as? String,
+                                    message == "authorization_in_progress" {
+                                print("⏳ Authorization still in progress...")
+                                return // Continue polling
+                            }
+                            
+                            // ✅ CHECK FOR INVALID STATE
+                            else if let message = json["message"] as? String,
+                                    message == "invalid_state" {
+                                print("❌ Invalid state - stopping polling")
+                                self.authError = "Invalid authorization state"
+                                self.isAuthenticating = false
+                                self.pendingAuthState = nil
+                                timer.invalidate()
+                                return
+                            }
+                            
+                            // ✅ FALLBACK - Still waiting
+                            else {
+                                print("⏳ Still waiting for authorization completion...")
+                                print("Response keys: \(Array(json.keys))")
                             }
                         }
                     } catch {
@@ -482,8 +530,8 @@ class SquareAuthService: ObservableObject {
             }.resume()
         }
         
-        // Set a timeout after 2 minutes
-        DispatchQueue.main.asyncAfter(deadline: .now() + 120) { [weak self] in
+        // Set a timeout after 5 minutes (increased for location selection)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 300) { [weak self] in
             timer.invalidate()
             
             guard let self = self, self.isAuthenticating else { return }
@@ -491,10 +539,21 @@ class SquareAuthService: ObservableObject {
             self.authError = "Authentication timed out"
             self.isAuthenticating = false
             self.pendingAuthState = nil
-            print("Authentication timed out after 2 minutes")
+            print("Authentication timed out after 5 minutes")
         }
         
         RunLoop.current.add(timer, forMode: .common)
+    }
+
+    // ✅ ALSO ADD: Switch to organization-based polling after timeout
+    private func switchToOrganizationPolling() {
+        print("🔄 Switching to organization-based polling...")
+        
+        // Clear state-based polling
+        pendingAuthState = nil
+        
+        // Use organization-based status check
+        checkAuthentication()
     }
     
     // MARK: - Token Management

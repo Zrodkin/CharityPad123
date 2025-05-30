@@ -1,7 +1,7 @@
 import Foundation
 import SquareMobilePaymentsSDK
 
-/// Service responsible for Square SDK initialization and authorization
+/// Service responsible for Square SDK initialization and authorization with enhanced location debugging
 class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
     // MARK: - Private Properties
     
@@ -32,7 +32,7 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
         return true
     }
     
-    /// Debug function to print SDK information
+    /// Debug function to print SDK information with enhanced location details
     func debugSquareSDK() {
         // Don't proceed if not initialized
         guard checkIfInitialized() else {
@@ -40,7 +40,7 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
             return
         }
         
-        print("\n--- Square SDK Debug Information ---")
+        print("\n--- ENHANCED Square SDK Debug Information ---")
         
         // SDK version and environment
         print("SDK Version: \(String(describing: MobilePaymentsSDK.version))")
@@ -49,38 +49,63 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
         // Authorization state
         print("Authorization State: \(MobilePaymentsSDK.shared.authorizationManager.state)")
         
-        // FIXED: Check current location info from SDK
+        // ENHANCED: Check current location info from SDK
         if let currentLocation = MobilePaymentsSDK.shared.authorizationManager.location {
-            print("Current Location ID: \(currentLocation.id)")
-            print("Current Location Name: \(currentLocation.name)")
+            print("✅ SDK Current Location ID: \(currentLocation.id)")
+            print("✅ SDK Current Location Name: \(currentLocation.name)")
+            print("ℹ️ SDK Current Location Status: (Not available on Location protocol)")
+            
+            // Compare with what we have in AuthService
+            if let authService = authService {
+                print("\n--- Location Comparison ---")
+                print("AuthService Location ID: \(authService.locationId ?? "NIL")")
+                print("AuthService Merchant ID: \(authService.merchantId ?? "NIL")")
+                
+                if let authLocationId = authService.locationId {
+                    if authLocationId == currentLocation.id {
+                        print("✅ MATCH: SDK and AuthService have same location ID")
+                    } else {
+                        print("❌ MISMATCH: SDK location (\(currentLocation.id)) != AuthService location (\(authLocationId))")
+                        print("🔧 SOLUTION: Need to re-authorize SDK with correct location")
+                    }
+                } else {
+                    print("❌ PROBLEM: AuthService has no location ID stored")
+                }
+            }
         } else {
-            print("No current location set in SDK")
+            print("❌ NO CURRENT LOCATION SET IN SDK")
+            print("🔧 This is why readers can't connect - SDK needs location authorization")
+            
+            if let authService = authService {
+                print("AuthService Location ID available: \(authService.locationId ?? "NIL")")
+                if authService.locationId != nil {
+                    print("🔧 SOLUTION: Use authService.locationId to authorize SDK")
+                } else {
+                    print("🔧 SOLUTION: Need to get location ID from OAuth flow")
+                }
+            }
         }
         
-        // Prompt parameters exploration
-        print("\n--- Prompt Parameters ---")
-        let promptParams = PromptParameters(mode: .default, additionalMethods: .all)
-        print("Successfully created PromptParameters")
-        print("- mode: \(promptParams.mode)")
-        print("- additionalMethods: \(promptParams.additionalMethods)")
+        // Reader information
+        print("\n--- Reader Information ---")
+        let readers = MobilePaymentsSDK.shared.readerManager.readers
+        print("Found \(readers.count) readers")
         
-        // Payment parameters with correct Money class
-        print("\n--- Payment Parameters ---")
-        let moneyAmount = Money(amount: 100, currency: .USD)
-        let paymentParams = PaymentParameters(
-            idempotencyKey: UUID().uuidString,
-            amountMoney: moneyAmount,
-            processingMode: .onlineOnly
-        )
-        print("Successfully created PaymentParameters")
-        print("- idempotencyKey: \(paymentParams.idempotencyKey)")
-        print("- amountMoney: \(paymentParams.amountMoney.amount) \(paymentParams.amountMoney.currency)")
-        print("- processingMode: \(paymentParams.processingMode)")
+        for (index, reader) in readers.enumerated() {
+            print("Reader \(index + 1):")
+            print("  Serial: \(reader.serialNumber ?? "unknown")")
+            print("  Model: \(reader.model)")
+            print("  State: \(reader.state)")
+            
+            if let batteryStatus = reader.batteryStatus {
+                print("  Battery: \(batteryStatus.isCharging ? "Charging" : "Not charging")")
+            }
+        }
         
         print("\n--- Debug Complete ---")
     }
     
-    /// Initialize the Square Mobile Payments SDK
+    /// Enhanced SDK initialization with proper location handling
     func initializeSDK(onSuccess: @escaping () -> Void = {}) {
         // Check if SDK is available first
         guard checkIfInitialized() else {
@@ -88,12 +113,7 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
             return
         }
         
-        // ADD DETAILED DEBUGGING
-        print("🔍 DEBUG: Starting SDK initialization")
-        print("🔍 AuthService available: \(authService != nil)")
-        print("🔍 Access token available: \(authService?.accessToken != nil)")
-        print("🔍 Location ID: \(authService?.locationId ?? "NIL")")
-        print("🔍 Merchant ID: \(authService?.merchantId ?? "NIL")")
+        print("🔍 ENHANCED DEBUG: Starting SDK initialization with location verification")
         
         // Get credentials from auth service
         guard let authService = authService,
@@ -104,33 +124,47 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
             return
         }
         
-        // CRITICAL FIX: Don't fallback to merchant ID - require proper location ID
+        // ✅ CRITICAL FIX: Verify we have a location ID
         guard let locationID = authService.locationId else {
             print("❌ CRITICAL: No location ID available for SDK authorization")
-            print("❌ This is required for reader connectivity")
-            print("❌ User needs to select a location during OAuth flow")
-            updatePaymentError("No location selected - please reconnect to Square and select a location")
-            updateConnectionStatus("Location required")
+            print("❌ This explains why readers can't connect!")
+            print("🔧 SOLUTION: User needs to complete OAuth flow with location selection")
+            
+            // Check if we need to re-authenticate to get location
+            checkAndFixLocationIssue()
             return
         }
         
-        print("✅ Using Location ID for SDK: \(locationID)")
+        print("✅ Found Location ID for SDK: \(locationID)")
+        print("✅ Found Merchant ID: \(authService.merchantId ?? "unknown")")
         
         // Check if already authorized with the SAME location
         if MobilePaymentsSDK.shared.authorizationManager.state == .authorized {
             // Verify we're authorized with the correct location
-            if let currentLocation = MobilePaymentsSDK.shared.authorizationManager.location,
-               currentLocation.id == locationID {
-                print("✅ Square SDK already authorized with correct location: \(locationID)")
-                updateConnectionStatus("SDK authorized")
-                onSuccess()
-                return
-            } else {
-                let currentLocationId = MobilePaymentsSDK.shared.authorizationManager.location?.id ?? "unknown"
-                print("⚠️ SDK authorized but with different location: \(currentLocationId) vs \(locationID)")
-                print("🔄 Re-authorizing with correct location...")
+            if let currentLocation = MobilePaymentsSDK.shared.authorizationManager.location {
+                print("📍 Current SDK Location: \(currentLocation.id) (\(currentLocation.name))")
+                print("📍 Expected Location: \(locationID)")
                 
-                // Deauthorize first, then re-authorize with correct location
+                if currentLocation.id == locationID {
+                    print("✅ Square SDK already authorized with correct location!")
+                    updateConnectionStatus("SDK authorized with \(currentLocation.name)")
+                    onSuccess()
+                    return
+                } else {
+                    print("⚠️ SDK authorized but with WRONG location!")
+                    print("🔄 Re-authorizing with correct location...")
+                    
+                    // Deauthorize first, then re-authorize with correct location
+                    MobilePaymentsSDK.shared.authorizationManager.deauthorize {
+                        DispatchQueue.main.async {
+                            self.performAuthorization(accessToken: accessToken, locationID: locationID, onSuccess: onSuccess)
+                        }
+                    }
+                    return
+                }
+            } else {
+                print("⚠️ SDK authorized but no location info - this shouldn't happen")
+                // Re-authorize to be safe
                 MobilePaymentsSDK.shared.authorizationManager.deauthorize {
                     DispatchQueue.main.async {
                         self.performAuthorization(accessToken: accessToken, locationID: locationID, onSuccess: onSuccess)
@@ -144,11 +178,14 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
         performAuthorization(accessToken: accessToken, locationID: locationID, onSuccess: onSuccess)
     }
 
-    // Enhanced helper method for cleaner authorization
+    // Enhanced helper method for authorization
     private func performAuthorization(accessToken: String, locationID: String, onSuccess: @escaping () -> Void) {
         print("🚀 Authorizing Square SDK with location ID: \(locationID)")
         
-        // FIXED: Use correct method signature from Square documentation
+        // Show what we're about to do
+        updateConnectionStatus("Authorizing SDK with location...")
+        
+        // Use correct method signature from Square documentation
         MobilePaymentsSDK.shared.authorizationManager.authorize(
             withAccessToken: accessToken,
             locationID: locationID
@@ -162,32 +199,98 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
                     self.updatePaymentError(errorMessage)
                     self.updateConnectionStatus("Authorization failed")
                     
+                    // Enhanced error diagnosis
+                    print("🔍 Error diagnosis:")
+                    print("  - Access token length: \(accessToken.count)")
+                    print("  - Location ID: \(locationID)")
+                    print("  - Error domain: \(authError.localizedDescription)")
+                    
                     // Check if this is a location-related error
                     if authError.localizedDescription.contains("location") ||
-                       authError.localizedDescription.contains("Location") {
-                        self.updatePaymentError("Invalid location selected - please reconnect to Square")
-                        print("❌ Location-specific error detected")
+                       authError.localizedDescription.contains("Location") ||
+                       authError.localizedDescription.contains("invalid") {
+                        self.updatePaymentError("Invalid location - please reconnect to Square and select the correct location")
+                        print("❌ Location-specific error detected - OAuth flow may need location reselection")
                     }
                     return
                 }
                 
                 // Success!
                 let currentLocation = MobilePaymentsSDK.shared.authorizationManager.location
-                print("✅ Square Mobile Payments SDK successfully authorized")
+                print("✅ Square Mobile Payments SDK successfully authorized!")
                 print("✅ Location ID: \(currentLocation?.id ?? "Unknown")")
                 print("✅ Location Name: \(currentLocation?.name ?? "Unknown")")
+                print("ℹ️ SDK Current Location Status: (Not available on Location protocol)")
                 
-                self.updateConnectionStatus("SDK authorized")
+                self.updateConnectionStatus("SDK authorized with \(currentLocation?.name ?? "location")")
                 self.updatePaymentError(nil) // Clear any previous errors
+                
+                // Debug what we just accomplished
+                self.debugSquareSDK()
+                
                 onSuccess()
             }
+        }
+    }
+    
+    /// NEW: Check and attempt to fix location issues
+    private func checkAndFixLocationIssue() {
+        print("🔧 Checking for location issues...")
+        
+        guard let authService = authService else {
+            print("❌ No auth service available")
+            return
+        }
+        
+        // Check if we have other auth data but missing location
+        if authService.accessToken != nil && authService.merchantId != nil && authService.locationId == nil {
+            print("🔍 Found tokens but missing location ID")
+            print("🔧 This suggests OAuth completed but location wasn't properly stored")
+            print("🔧 SOLUTION: Re-check authentication status to get location")
+            
+            updateConnectionStatus("Re-checking location info...")
+            
+            // Re-check authentication to see if backend has location
+            authService.checkAuthentication()
+            
+            // After check, try again in 2 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if authService.locationId != nil {
+                    print("✅ Location found after re-check, retrying SDK init")
+                    self.initializeSDK()
+                } else {
+                    print("❌ Still no location after re-check")
+                    self.updatePaymentError("Missing location info - please reconnect to Square")
+                    self.updateConnectionStatus("Location required - please reconnect")
+                }
+            }
+        } else if authService.accessToken == nil {
+            print("❌ No access token - user needs to authenticate")
+            updatePaymentError("Not connected to Square - please authenticate")
+            updateConnectionStatus("Not authenticated")
+        } else {
+            print("❌ Unknown auth issue")
+            updateConnectionStatus("Authentication issue")
         }
     }
     
     /// Check if the Square SDK is authorized
     func isSDKAuthorized() -> Bool {
         guard checkIfInitialized() else { return false }
-        return MobilePaymentsSDK.shared.authorizationManager.state == .authorized
+        let isAuthorized = MobilePaymentsSDK.shared.authorizationManager.state == .authorized
+        
+        // Enhanced check: also verify we have location info
+        if isAuthorized {
+            if let location = MobilePaymentsSDK.shared.authorizationManager.location {
+                print("✅ SDK authorized with location: \(location.name) (\(location.id))")
+                return true
+            } else {
+                print("⚠️ SDK authorized but no location info")
+                return false
+            }
+        }
+        
+        return false
     }
     
     /// Deauthorize the Square SDK
@@ -197,8 +300,11 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
             return
         }
         
+        print("🔄 Deauthorizing Square SDK...")
+        
         MobilePaymentsSDK.shared.authorizationManager.deauthorize {
             DispatchQueue.main.async { [weak self] in
+                print("✅ Square SDK deauthorized")
                 self?.updateConnectionStatus("Disconnected")
                 
                 // Update reader connected state
@@ -224,9 +330,14 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
             print("🔄 Authorization state changed to: \(authorizationState)")
             
             if authorizationState == .authorized {
-                print("✅ SDK is now authorized")
-                self?.updateConnectionStatus("SDK authorized")
-                self?.paymentService?.connectToReader()
+                if let location = MobilePaymentsSDK.shared.authorizationManager.location {
+                    print("✅ SDK is now authorized with location: \(location.name)")
+                    self?.updateConnectionStatus("SDK authorized with \(location.name)")
+                    self?.paymentService?.connectToReader()
+                } else {
+                    print("⚠️ SDK authorized but no location info")
+                    self?.updateConnectionStatus("SDK authorized but missing location")
+                }
             } else {
                 print("❌ SDK is not authorized")
                 self?.updateConnectionStatus("Not authorized")
@@ -241,14 +352,14 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
     
     // MARK: - Private Methods
     
-    /// FIXED: Update the connection status in the payment service (handle nil case)
+    /// Update the connection status in the payment service (handle nil case)
     private func updateConnectionStatus(_ status: String) {
         DispatchQueue.main.async { [weak self] in
             self?.paymentService?.connectionStatus = status
         }
     }
     
-    /// FIXED: Update payment error in the payment service (handle nil case)
+    /// Update payment error in the payment service (handle nil case)
     private func updatePaymentError(_ error: String?) {
         DispatchQueue.main.async { [weak self] in
             self?.paymentService?.paymentError = error
