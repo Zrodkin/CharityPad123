@@ -110,6 +110,97 @@ class SquarePaymentService: NSObject, ObservableObject {
         sdkInitializationService.deauthorizeSDK(completion: completion)
     }
     
+    // MARK: - NEW: Square's Built-in Reader Management
+    
+    /// Present Square's built-in reader management UI
+    func presentSquareReaderSettings() {
+        guard isSDKAuthorized() else {
+            DispatchQueue.main.async {
+                self.paymentError = "Please connect to Square first"
+            }
+            return
+        }
+        
+        // Find the current view controller
+        guard let windowScene = UIApplication.shared.connectedScenes
+            .filter({ $0.activationState == .foregroundActive })
+            .compactMap({ $0 as? UIWindowScene })
+            .first,
+              let rootViewController = windowScene.windows.first?.rootViewController else {
+            print("Could not find root view controller")
+            return
+        }
+
+        // Find the top-most presented view controller
+        var topController = rootViewController
+        while let presented = topController.presentedViewController {
+            topController = presented
+        }
+
+        print("🎛️ Presenting Square's built-in reader settings...")
+        
+        // Present Square's native settings UI
+        MobilePaymentsSDK.shared.settingsManager.presentSettings(
+            with: topController,
+            completion: { [weak self] _ in
+                print("✅ Square settings dismissed")
+                
+                // Refresh reader connection status after settings are dismissed
+                DispatchQueue.main.async {
+                    self?.checkReaderStatus()
+                }
+            }
+        )
+    }
+    
+    /// Check reader status (simplified approach using Square's built-in management)
+    func checkReaderStatus() {
+        print("🔌 Checking reader connection via Square SDK...")
+        
+        guard isSDKAuthorized() else {
+            DispatchQueue.main.async {
+                self.connectionStatus = "Not authorized with Square"
+                self.isReaderConnected = false
+            }
+            return
+        }
+        
+        // Let Square SDK handle all the permission and reader management
+        // We just check if readers are available
+        let availableReaders = MobilePaymentsSDK.shared.readerManager.readers
+        let readyReaders = availableReaders.filter { $0.state == .ready }
+        
+        DispatchQueue.main.async {
+            if readyReaders.isEmpty {
+                self.connectionStatus = "No readers connected. Use 'Manage Readers' to pair a reader."
+                self.isReaderConnected = false
+            } else {
+                let readerName = readyReaders.first?.model == .stand ? "Square Stand" : "Square Reader"
+                self.connectionStatus = "Connected to \(readerName)"
+                self.isReaderConnected = true
+                self.paymentError = nil // Clear any previous errors
+            }
+            
+            // Update available payment methods
+            self.updateAvailablePaymentMethods()
+        }
+    }
+    
+    /// Update available payment methods based on connected readers
+    private func updateAvailablePaymentMethods() {
+        guard isSDKAuthorized() else { return }
+        
+        let cardInputMethods = MobilePaymentsSDK.shared.paymentManager.availableCardInputMethods
+        
+        DispatchQueue.main.async {
+            // Update payment method flags
+            self.hasAvailablePaymentMethods = true // Square SDK handles the details
+            
+            // Log available methods for debugging
+            print("💳 Available payment methods updated")
+        }
+    }
+    
     /// Process payment (updated to match CheckoutView expectations)
     func processPayment(
         amount: Double,

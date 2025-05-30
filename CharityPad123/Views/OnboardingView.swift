@@ -1,5 +1,8 @@
+// Updated OnboardingView.swift with permission request
+
 import SwiftUI
 import SafariServices
+import CoreLocation
 
 struct OnboardingView: View {
     @State private var isLoading = false
@@ -12,6 +15,9 @@ struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @EnvironmentObject private var organizationStore: OrganizationStore
     @EnvironmentObject private var squareAuthService: SquareAuthService
+    
+    // NEW: Location permission manager
+    @StateObject private var locationManager = LocationPermissionManager()
     
     var body: some View {
         ZStack {
@@ -95,9 +101,8 @@ struct OnboardingView: View {
                             hasCompletedOnboarding = true
                             print("Already authenticated, completing onboarding directly")
                         } else {
-                            // Otherwise start the auth flow directly
-                            isLoading = true
-                            startAuth()
+                            // NEW: Request location permission first, then start auth
+                            requestLocationThenAuth()
                         }
                     }) {
                         HStack {
@@ -235,7 +240,42 @@ struct OnboardingView: View {
                 pollingTimer = nil
             }
         }
+        // NEW: Show location permission alert when needed
+        .alert("Location Permission Required", isPresented: $locationManager.showingPermissionAlert) {
+            Button("Settings") {
+                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsUrl)
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                isLoading = false
+            }
+        } message: {
+            Text("CharityPad needs location access to connect to Square card readers. Please enable Location Services in Settings.")
+        }
     }
+    
+    // NEW: Request location permission first, then start auth
+    private func requestLocationThenAuth() {
+        print("🔍 Requesting location permission before auth...")
+        
+        isLoading = true
+        
+        locationManager.requestLocationPermission { [self] granted in
+            DispatchQueue.main.async {
+                if granted {
+                    print("✅ Location permission granted, starting auth")
+                    self.startAuth()
+                } else {
+                    print("❌ Location permission denied")
+                    self.isLoading = false
+                    // Alert is handled by LocationPermissionManager
+                }
+            }
+        }
+    }
+    
+    // ... rest of your existing methods (handleOAuthCallback, startIntensivePolling, startAuth) remain the same ...
     
     // Handle OAuth callback notification
     private func handleOAuthCallback(_ notification: Notification) {
@@ -342,6 +382,77 @@ struct OnboardingView: View {
                 // Show Safari directly
                 self.showingSafari = true
             }
+        }
+    }
+}
+
+// NEW: Location Permission Manager
+class LocationPermissionManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published var showingPermissionAlert = false
+    
+    private var locationManager: CLLocationManager
+    private var permissionCompletion: ((Bool) -> Void)?
+    
+    override init() {
+        locationManager = CLLocationManager()
+        super.init()
+        locationManager.delegate = self
+    }
+    
+    func requestLocationPermission(completion: @escaping (Bool) -> Void) {
+        permissionCompletion = completion
+        
+        let status = locationManager.authorizationStatus
+        print("📍 Current location status: \(status)")
+        
+        switch status {
+        case .notDetermined:
+            print("📍 Requesting location permission...")
+            locationManager.requestWhenInUseAuthorization()
+            
+        case .authorizedWhenInUse, .authorizedAlways:
+            print("✅ Location permission already granted")
+            completion(true)
+            
+        case .denied, .restricted:
+            print("❌ Location permission denied")
+            showingPermissionAlert = true
+            completion(false)
+            
+        @unknown default:
+            print("⚠️ Unknown location status")
+            completion(false)
+        }
+    }
+    
+    // MARK: - CLLocationManagerDelegate
+    
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        print("📍 Location authorization changed to: \(status)")
+        
+        switch status {
+        case .authorizedWhenInUse, .authorizedAlways:
+            print("✅ Location permission granted")
+            permissionCompletion?(true)
+            
+        case .denied, .restricted:
+            print("❌ Location permission denied")
+            showingPermissionAlert = true
+            permissionCompletion?(false)
+            
+        case .notDetermined:
+            print("📍 Location permission still not determined")
+            // Don't call completion yet, wait for user decision
+            
+        @unknown default:
+            print("⚠️ Unknown location authorization status")
+            permissionCompletion?(false)
+        }
+        
+        // Clear completion to avoid duplicate calls
+        if status != .notDetermined {
+            permissionCompletion = nil
         }
     }
 }
