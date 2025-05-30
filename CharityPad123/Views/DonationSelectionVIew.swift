@@ -8,6 +8,9 @@ struct DonationSelectionView: View {
     
     @State private var navigateToCustomAmount = false
     @State private var navigateToCheckout = false
+    // 🆕 NEW: Navigation state for going to home
+    @State private var navigateToHome = false
+    
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     var body: some View {
@@ -69,8 +72,17 @@ struct DonationSelectionView: View {
                 isCustomAmount: donationViewModel.isCustomAmount,
                 onDismiss: {
                     handleCheckoutDismiss()
+                },
+                // 🆕 NEW: Pass home navigation callback
+                onNavigateToHome: {
+                    handleNavigateToHome()
                 }
             )
+        }
+        // 🆕 NEW: Navigation destination for home
+        .navigationDestination(isPresented: $navigateToHome) {
+            HomeView()
+                .navigationBarBackButtonHidden(true)
         }
     }
     
@@ -149,6 +161,21 @@ struct DonationSelectionView: View {
     private func handleCheckoutDismiss() {
         navigateToCheckout = false
         donationViewModel.resetDonation()
+    }
+    
+    // 🆕 NEW: Handle navigation to home from checkout
+    private func handleNavigateToHome() {
+        print("🏠 Navigating to home from checkout (silent cancellation)")
+        
+        // Reset all navigation states
+        navigateToCheckout = false
+        navigateToCustomAmount = false
+        
+        // Reset donation state
+        donationViewModel.resetDonation()
+        
+        // Navigate to home
+        navigateToHome = true
     }
     
     private func updateDonationViewModel() {

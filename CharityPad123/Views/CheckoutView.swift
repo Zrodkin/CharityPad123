@@ -1,4 +1,4 @@
-// MARK: - Fixed CheckoutView with Correct Payment Methods
+// MARK: - Updated CheckoutView with Silent Cancel to Home
 import SwiftUI
 import SquareMobilePaymentsSDK
 
@@ -16,9 +16,11 @@ struct CheckoutView: View {
     // Navigation via callback function
     var onDismiss: () -> Void
     
+    // 🆕 NEW: Add navigation to home callback
+    var onNavigateToHome: (() -> Void)? = nil
+    
     // State
     @State private var showingThankYou = false
-    @State private var showingError = false
     @State private var showingSquareAuth = false
     @State private var processingState: ProcessingState = .ready
     @State private var orderId: String? = nil
@@ -37,7 +39,7 @@ struct CheckoutView: View {
         case creatingOrder
         case processingPayment
         case completed
-        case error
+        // 🗑️ REMOVED: .error state - we don't show errors anymore
     }
     
     var body: some View {
@@ -102,7 +104,6 @@ struct CheckoutView: View {
                     
                     // Cancel button
                     Button("Cancel") {
-                        // 🔧 FIX: Notify that payment flow is ending when canceling
                         handleCancel()
                     }
                     .foregroundColor(.white)
@@ -120,10 +121,7 @@ struct CheckoutView: View {
                 thankYouOverlay
             }
             
-            // Error overlay
-            if showingError {
-                errorOverlay
-            }
+            // 🗑️ REMOVED: Error overlay - we don't show errors anymore
             
             // 🆕 Receipt prompt overlay
             if showingReceiptPrompt {
@@ -139,7 +137,6 @@ struct CheckoutView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
-                    // 🔧 FIX: Handle back button properly
                     handleCancel()
                 }) {
                     Image(systemName: "chevron.left")
@@ -150,7 +147,6 @@ struct CheckoutView: View {
             }
         }
         .onAppear {
-            // 🔧 FIX: Notify that payment flow has started
             print("🎯 CheckoutView appeared - starting payment flow")
             NotificationCenter.default.post(name: NSNotification.Name("PaymentFlowStarted"), object: nil)
             
@@ -159,23 +155,21 @@ struct CheckoutView: View {
             }
         }
         .onDisappear {
-            // 🔧 FIX: Always notify when leaving checkout, regardless of how
             print("🎯 CheckoutView disappeared - ending payment flow")
             NotificationCenter.default.post(name: NSNotification.Name("PaymentFlowEnded"), object: nil)
         }
-        .onReceive(paymentService.$paymentError) { error in
-            if error != nil {
-                processingState = .error
-                showingError = true
-            }
-        }
+        // 🗑️ REMOVED: Error state monitoring - we don't handle errors in UI anymore
         .onReceive(paymentService.$isProcessingPayment) { isProcessing in
             if isProcessing {
                 processingState = .processingPayment
             } else if processingState == .processingPayment && !isProcessing {
+                // 🔧 MODIFIED: Check if payment was successful vs cancelled/failed
                 if paymentService.paymentError == nil {
                     processingState = .completed
                     showingThankYou = true
+                } else {
+                    // 🆕 NEW: Silent handling of payment failures/cancellations
+                    handleSilentFailureOrCancellation()
                 }
             }
         }
@@ -235,8 +229,6 @@ struct CheckoutView: View {
             return "hourglass"
         case .completed:
             return "checkmark.circle"
-        case .error:
-            return "exclamationmark.circle"
         }
     }
     
@@ -250,8 +242,6 @@ struct CheckoutView: View {
             return "Processing..."
         case .completed:
             return "Completed"
-        case .error:
-            return "Try Again"
         }
     }
     
@@ -263,8 +253,6 @@ struct CheckoutView: View {
             return Color.gray
         case .completed:
             return Color.green
-        case .error:
-            return Color.red
         }
     }
     
@@ -306,7 +294,6 @@ struct CheckoutView: View {
                 }
                 
                 Button("Done") {
-                    // 🆕 Show receipt prompt instead of immediate completion
                     showingThankYou = false
                     showingReceiptPrompt = true
                 }
@@ -321,45 +308,11 @@ struct CheckoutView: View {
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                // 🆕 Show receipt prompt instead of auto-completion
                 if showingThankYou {
                     showingThankYou = false
                     showingReceiptPrompt = true
                 }
             }
-        }
-    }
-    
-    private var errorOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.8)
-                .edgesIgnoringSafeArea(.all)
-            
-            VStack(spacing: 20) {
-                Image(systemName: "exclamationmark.circle.fill")
-                    .font(.system(size: 70))
-                    .foregroundColor(.red)
-                
-                Text("Payment Failed")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                
-                Text(paymentService.paymentError ?? "Payment processing failed")
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                
-                Button("Try Again") {
-                    resetPaymentState()
-                }
-                .padding(.horizontal, 40)
-                .padding(.vertical, 10)
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-                .padding(.top, 20)
-            }
-            .padding()
         }
     }
     
@@ -537,22 +490,33 @@ struct CheckoutView: View {
         return formatter.string(from: NSNumber(value: amount)) ?? "$\(amount)"
     }
     
-    // 🔧 FIX: New method to handle cancellation properly
     private func handleCancel() {
         print("🚫 Payment cancelled by user")
-        
-        // Reset any payment state
         resetPaymentState()
-        
-        // Call the onDismiss callback
         onDismiss()
     }
     
-    // 🔧 FIX: New method to handle successful completion
+    // 🆕 NEW: Silent handling of payment failures/cancellations
+    private func handleSilentFailureOrCancellation() {
+        print("🔇 Payment failed or cancelled - silently navigating to home")
+        
+        // Clear any error state
+        paymentService.paymentError = nil
+        
+        // Reset payment state
+        resetPaymentState()
+        
+        // Navigate directly to home without showing any error
+        if let onNavigateToHome = onNavigateToHome {
+            onNavigateToHome()
+        } else {
+            // Fallback - dismiss this view
+            onDismiss()
+        }
+    }
+    
     private func handleSuccessfulCompletion() {
         print("✅ Payment completed successfully")
-        
-        // Call the onDismiss callback
         onDismiss()
     }
     
@@ -563,10 +527,10 @@ struct CheckoutView: View {
             return
         }
         
-        // Check reader connection
+        // Check reader connection - if no reader, silently go back to home
         if !paymentService.isReaderConnected {
-            paymentService.paymentError = "Card reader not connected. Please contact staff."
-            showingError = true
+            print("🔇 No reader connected - silently navigating to home")
+            handleSilentFailureOrCancellation()
             return
         }
         
@@ -588,7 +552,7 @@ struct CheckoutView: View {
         // Use the unified payment processing method from SquarePaymentService
         paymentService.processPayment(
             amount: amount,
-            orderId: nil, // Let the service create the order
+            orderId: nil,
             isCustomAmount: isCustomAmount,
             catalogItemId: catalogItemId,
             allowOffline: true
@@ -608,9 +572,9 @@ struct CheckoutView: View {
                     self.processingState = .completed
                     self.showingThankYou = true
                 } else {
-                    print("❌ Payment failed")
-                    self.processingState = .error
-                    self.showingError = true
+                    print("🔇 Payment failed/cancelled - silently handling")
+                    // Don't set any error state, just handle silently
+                    self.handleSilentFailureOrCancellation()
                 }
             }
         }
@@ -618,7 +582,6 @@ struct CheckoutView: View {
     
     private func resetPaymentState() {
         processingState = .ready
-        showingError = false
         showingThankYou = false
         showingReceiptPrompt = false
         showingEmailEntry = false
@@ -650,18 +613,13 @@ struct CheckoutView: View {
         // For now, simulate sending delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             self.isSendingReceipt = false
-            
-            // Show success message briefly
             self.showEmailSuccessAndComplete()
         }
     }
     
     // 🆕 Show email success and complete
     private func showEmailSuccessAndComplete() {
-        // Create a temporary success view
         showingEmailEntry = false
-        
-        // Show a brief success message
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.handleSuccessfulCompletion()
         }
@@ -680,19 +638,5 @@ struct EmailTextFieldStyle: TextFieldStyle {
                     .fill(Color.white)
             )
             .foregroundColor(.black)
-    }
-}
-
-struct CheckoutView_Previews: PreviewProvider {
-    static var previews: some View {
-        let authService = SquareAuthService()
-        let catalogService = SquareCatalogService(authService: authService)
-        
-        return CheckoutView(amount: 50.0, isCustomAmount: false, onDismiss: {})
-            .environmentObject(KioskStore())
-            .environmentObject(DonationViewModel())
-            .environmentObject(authService)
-            .environmentObject(catalogService)
-            .environmentObject(SquarePaymentService(authService: authService, catalogService: catalogService))
     }
 }

@@ -6,6 +6,9 @@ struct UpdatedCustomAmountView: View {
     @State private var amountString: String = ""
     @State private var errorMessage: String? = nil
     @State private var shakeOffset: CGFloat = 0
+    @State private var navigateToCheckout = false
+    @State private var navigateToHome = false // 🆕 NEW: Navigation to home
+    @State private var selectedAmount: Double = 0
     
     // Callback for when amount is selected
     var onAmountSelected: (Double) -> Void
@@ -61,7 +64,7 @@ struct UpdatedCustomAmountView: View {
                 Spacer()
                     .frame(height: 30)
                 
-                // Keypad (keep all your existing keypad code)
+                // Keypad
                 VStack(spacing: 12) {
                     // Row 1
                     HStack(spacing: 12) {
@@ -152,9 +155,26 @@ struct UpdatedCustomAmountView: View {
         .onDisappear {
             print("📱 UpdatedCustomAmountView disappeared")
         }
+        // 🆕 NEW: Navigation destinations
+        .navigationDestination(isPresented: $navigateToCheckout) {
+            CheckoutView(
+                amount: selectedAmount,
+                isCustomAmount: true,
+                onDismiss: {
+                    navigateToCheckout = false
+                },
+                onNavigateToHome: {
+                    handleNavigateToHome()
+                }
+            )
+        }
+        .navigationDestination(isPresented: $navigateToHome) {
+            HomeView()
+                .navigationBarBackButtonHidden(true)
+        }
     }
     
-    // MARK: - Helper Methods (modern functionality)
+    // MARK: - Helper Methods
     
     private func handleNumberPress(_ num: String) {
         let maxDigits = 7
@@ -267,16 +287,28 @@ struct UpdatedCustomAmountView: View {
         }
         
         print("✅ Valid amount entered: $\(amount)")
-        print("🚀 Calling onAmountSelected callback...")
+        print("🚀 Navigating to checkout...")
         
         // Modern haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
-        // Call the callback with the selected amount
-        onAmountSelected(amount)
+        // Store amount and navigate to checkout
+        selectedAmount = amount
+        navigateToCheckout = true
         
-        print("📤 Callback completed")
+        print("📤 Navigation initiated")
+    }
+    
+    // 🆕 NEW: Handle navigation to home from checkout
+    private func handleNavigateToHome() {
+        print("🏠 Navigating to home from custom amount checkout")
+        
+        // Reset states
+        navigateToCheckout = false
+        
+        // Navigate to home
+        navigateToHome = true
     }
     
     // MARK: - Cute shake animation helper
