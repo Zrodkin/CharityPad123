@@ -162,10 +162,10 @@ struct UpdatedCustomAmountView: View {
                 paymentProcessingOverlay
             }
             
-            // Success overlay - DISABLED FOR DEBUGGING
-            // if showingThankYou {
-            //     thankYouOverlay
-            // }
+            // Success overlay
+            if showingThankYou {
+                thankYouOverlay
+            }
             
             // Receipt prompt overlay
             if showingReceiptPrompt {
@@ -208,23 +208,15 @@ struct UpdatedCustomAmountView: View {
             )
         }
         .navigationDestination(isPresented: $navigateToHome) {
-            // DON'T create a new HomeView - this causes navigation stack conflicts!
-            // Instead, this should pop back to root
-            EmptyView()
+            HomeView()
+                .navigationBarBackButtonHidden(true)
         }
         .sheet(isPresented: $showingSquareAuth) {
             SquareAuthorizationView()
         }
-        .onReceive(paymentService.$isProcessingPayment) { processing in
-            print("🔄 onReceive: processing=\(processing), isProcessingPayment=\(isProcessingPayment)")
-            if !processing && isProcessingPayment {
-                print("🔄 onReceive: Payment stopped, dismissing back to home")
-                // Use dismiss instead of navigation to prevent stack conflicts
-                self.resetPaymentState()
-                self.dismiss()
-                self.dismiss() // Go back through DonationSelectionView to HomeView
-            }
-        }
+        // 🔧 REMOVED: The problematic onReceive that was causing race conditions
+        // This was interfering with the completion handler and causing cancelled payments
+        // to incorrectly show the thank you screen
     }
     
     // MARK: - UI Overlays
@@ -570,7 +562,7 @@ struct UpdatedCustomAmountView: View {
         processPayment(amount: amount, isCustomAmount: true)
     }
     
-    // MAIN DEBUG METHOD - This is where the debug alert will show
+    // 🔧 FIXED: Updated processPayment method to handle cancellations properly
     private func processPayment(amount: Double, isCustomAmount: Bool) {
         if !squareAuthService.isAuthenticated {
             showingSquareAuth = true
@@ -592,46 +584,43 @@ struct UpdatedCustomAmountView: View {
             catalogItemId: nil,
             allowOffline: true
         ) { success, transactionId in
-            print("🎯 Completion handler: success=\(success), transactionId=\(transactionId ?? "nil")")
-            // Handle success in completion handler since onReceive always goes home
+            print("🎯 CustomAmount Completion handler: success=\(success), transactionId=\(transactionId ?? "nil")")
+            
             DispatchQueue.main.async {
-                print("🔄 Setting isProcessingPayment = false")
+                // Always reset processing state first
                 self.isProcessingPayment = false
                 
                 if success {
-                    print("✅ Success path: Recording donation and showing thank you")
-                    // Record the donation and show success briefly before going home
+                    print("✅ CustomAmount Success: Recording donation and showing thank you")
+                    // Record the donation
                     self.donationViewModel.recordDonation(amount: amount, transactionId: transactionId)
                     self.orderId = self.paymentService.currentOrderId
                     self.paymentId = transactionId
                     
-                    // Show success for 2 seconds then go home
+                    // Show success briefly then go home
                     self.showingThankYou = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        self.resetPaymentState()
-                        self.navigateToHome = true
+                        self.handleSuccessfulCompletion()
                     }
                 } else {
-                    print("❌ Failure path: Should let onReceive handle going home")
+                    print("❌ CustomAmount Cancelled/Failed: Going back to previous screen")
+                    // Payment was cancelled or failed - just go back
+                    self.handleSilentFailureOrCancellation()
                 }
-                // If not success, onReceive will handle going home
             }
         }
     }
     
     private func handleNavigateToHome() {
-        // Instead of navigating to a new HomeView, dismiss back to the root
-        // This prevents navigation stack conflicts
-        dismiss()
-        dismiss() // Call twice to go back through DonationSelectionView to HomeView
+        // Navigate directly to home view
+        navigateToHome = true
     }
     
     private func handleSilentFailureOrCancellation() {
         paymentService.paymentError = nil
         resetPaymentState()
-        // Use dismiss instead of navigation to prevent stack conflicts
+        // Use dismiss to go back to DonationSelectionView, then that view will handle going to home
         dismiss()
-        dismiss() // Go back through DonationSelectionView to HomeView
     }
     
     private func handleSuccessfulCompletion() {
@@ -729,6 +718,7 @@ struct KeypadButtonStyle: ButtonStyle {
             .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
+
 
 
 struct UpdatedCustomAmountView_Previews: PreviewProvider {

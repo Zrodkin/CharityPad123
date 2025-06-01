@@ -1,3 +1,6 @@
+// Add this to your DonationSelectionView.swift
+// Updated to handle custom amount cancellations and navigate to home
+
 import SwiftUI
 
 struct DonationSelectionView: View {
@@ -5,13 +8,16 @@ struct DonationSelectionView: View {
     @EnvironmentObject var donationViewModel: DonationViewModel
     @EnvironmentObject var squareAuthService: SquareAuthService
     @EnvironmentObject var catalogService: SquareCatalogService
-    @EnvironmentObject var paymentService: SquarePaymentService // Add payment service
+    @EnvironmentObject var paymentService: SquarePaymentService
     
     @State private var navigateToCustomAmount = false
     @State private var navigateToCheckout = false
     @State private var navigateToHome = false
     
-    // NEW: Add payment processing states
+    // NEW: Track if we're returning from custom amount view with cancellation
+    @State private var shouldNavigateToHomeOnAppear = false
+    
+    // Payment processing states
     @State private var isProcessingPayment = false
     @State private var showingSquareAuth = false
     @State private var showingThankYou = false
@@ -64,22 +70,22 @@ struct DonationSelectionView: View {
                     .frame(height: KioskLayoutConstants.bottomSafeArea)
             }
             
-            // NEW: Payment processing overlay
+            // Payment processing overlay
             if isProcessingPayment {
                 paymentProcessingOverlay
             }
             
-            // NEW: Success overlay
+            // Success overlay
             if showingThankYou {
                 thankYouOverlay
             }
             
-            // NEW: Receipt prompt overlay
+            // Receipt prompt overlay
             if showingReceiptPrompt {
                 receiptPromptOverlay
             }
             
-            // NEW: Email entry overlay
+            // Email entry overlay
             if showingEmailEntry {
                 emailEntryOverlay
             }
@@ -87,6 +93,15 @@ struct DonationSelectionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(false)
         .onAppear {
+            // 🔧 NEW: Handle navigation to home if returning from cancelled custom amount
+            if shouldNavigateToHomeOnAppear {
+                shouldNavigateToHomeOnAppear = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    navigateToHome = true
+                }
+                return
+            }
+            
             if squareAuthService.isAuthenticated {
                 kioskStore.connectCatalogService(catalogService)
                 kioskStore.loadPresetDonationsFromCatalog()
@@ -101,6 +116,14 @@ struct DonationSelectionView: View {
         .navigationDestination(isPresented: $navigateToCustomAmount) {
             UpdatedCustomAmountView { amount in
                 handleCustomAmountSelection(amount: amount)
+            }
+            // 🔧 NEW: Handle when custom amount view is dismissed (cancellation)
+            .onDisappear {
+                // Check if payment was cancelled/failed and we should go to home
+                if donationViewModel.selectedAmount == nil || donationViewModel.selectedAmount == 0 {
+                    print("🏠 Custom amount cancelled - setting flag to navigate to home")
+                    shouldNavigateToHomeOnAppear = true
+                }
             }
         }
         .navigationDestination(isPresented: $navigateToCheckout) {
@@ -122,17 +145,15 @@ struct DonationSelectionView: View {
         .sheet(isPresented: $showingSquareAuth) {
             SquareAuthorizationView()
         }
-        // NEW: Monitor payment processing
+        // Monitor payment processing
         .onReceive(paymentService.$isProcessingPayment) { processing in
             if !processing && isProcessingPayment {
-                // Payment finished - but let the completion handler deal with the result
-                // Don't immediately handle the result here to avoid interfering with Square UI
                 print("🔄 Payment processing state changed to: \(processing)")
             }
         }
     }
     
-    // MARK: - Computed Properties
+    // MARK: - Computed Properties (unchanged)
     
     private var backgroundImageView: some View {
         Group {
@@ -166,7 +187,7 @@ struct DonationSelectionView: View {
         }
     }
     
-    // NEW: Payment processing overlay
+    // Payment processing overlay (unchanged)
     private var paymentProcessingOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -192,7 +213,7 @@ struct DonationSelectionView: View {
         }
     }
     
-    // NEW: Thank you overlay (copied from CheckoutView)
+    // Thank you overlay (unchanged)
     private var thankYouOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -246,7 +267,7 @@ struct DonationSelectionView: View {
         }
     }
     
-    // NEW: Receipt prompt overlay (copied from CheckoutView)
+    // Receipt prompt overlay (unchanged)
     private var receiptPromptOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -312,7 +333,7 @@ struct DonationSelectionView: View {
         }
     }
     
-    // NEW: Email entry overlay (copied from CheckoutView)
+    // Email entry overlay (unchanged)
     private var emailEntryOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -417,7 +438,7 @@ struct DonationSelectionView: View {
         let amount = Double(kioskStore.presetDonations[index].amount) ?? 0
         
         return Button(action: {
-            // CHANGED: Process payment immediately instead of navigating to checkout
+            // Process payment immediately instead of navigating to checkout
             handlePresetAmountSelection(amount: amount)
         }) {
             ZStack {
@@ -433,7 +454,7 @@ struct DonationSelectionView: View {
         .frame(maxWidth: .infinity)
     }
     
-    // CHANGED: Process payment immediately for preset amounts
+    // Process payment immediately for preset amounts
     private func handlePresetAmountSelection(amount: Double) {
         print("🚀 Preset amount selected: $\(amount) - processing immediately")
         
@@ -446,6 +467,8 @@ struct DonationSelectionView: View {
     
     private func handleCustomAmountButtonPress() {
         donationViewModel.isCustomAmount = true
+        // 🔧 NEW: Reset the flag before navigating
+        shouldNavigateToHomeOnAppear = false
         navigateToCustomAmount = true
     }
     
@@ -461,7 +484,7 @@ struct DonationSelectionView: View {
     }
     
     private func handleNavigateToHome() {
-        print("🏠 Navigating to home from checkout (silent cancellation)")
+        print("🏠 Navigating to home from DonationSelectionView")
         
         // Reset all navigation states
         navigateToCheckout = false
@@ -474,7 +497,7 @@ struct DonationSelectionView: View {
         navigateToHome = true
     }
     
-    // NEW: Process payment method (moved from CheckoutView logic)
+    // Process payment method (unchanged)
     private func processPayment(amount: Double, isCustomAmount: Bool) {
         // Check authentication
         if !squareAuthService.isAuthenticated {
@@ -538,7 +561,7 @@ struct DonationSelectionView: View {
         }
     }
     
-    // NEW: Silent handling of payment failures/cancellations
+    // Silent handling of payment failures/cancellations
     private func handleSilentFailureOrCancellation() {
         print("🔇 Payment failed or cancelled - silently navigating to home")
         
@@ -570,14 +593,14 @@ struct DonationSelectionView: View {
         isSendingReceipt = false
     }
     
-    // NEW: Email validation (copied from CheckoutView)
+    // Email validation (unchanged)
     private func validateEmail(_ email: String) {
         let emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
         let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
         isEmailValid = emailPredicate.evaluate(with: email)
     }
     
-    // NEW: Send receipt (copied from CheckoutView)
+    // Send receipt (unchanged)
     private func sendReceipt() {
         guard isEmailValid && !emailAddress.isEmpty else { return }
         
@@ -595,7 +618,7 @@ struct DonationSelectionView: View {
         }
     }
     
-    // NEW: Show email success and complete
+    // Show email success and complete (unchanged)
     private func showEmailSuccessAndComplete() {
         showingEmailEntry = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -610,8 +633,6 @@ struct DonationSelectionView: View {
         }
     }
 }
-
-// EmailTextFieldStyle is defined in CustomAmountView.swift to avoid redeclaration
 
 struct DonationSelectionView_Previews: PreviewProvider {
     static var previews: some View {
