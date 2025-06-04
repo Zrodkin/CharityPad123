@@ -4,6 +4,7 @@ struct EmailReceiptsView: View {
     @EnvironmentObject private var organizationStore: OrganizationStore
     @State private var organizationName: String = ""
     @State private var taxId: String = ""
+    @State private var receiptMessage: String = ""
     @State private var isSaving = false
     @State private var showToast = false
     
@@ -60,9 +61,34 @@ struct EmailReceiptsView: View {
                                     subtitle: "Required for tax-deductible donation receipts"
                                 )
                                 
-                                TextField("12-3456789", text: $taxId)
+                                TextField("", text: $taxId)
                                     .textFieldStyle(ModernTextFieldStyle())
                                     .keyboardType(.numbersAndPunctuation)
+                            }
+                            // Custom Receipt Message Field 🆕 ADD THIS ENTIRE SECTION
+                            VStack(alignment: .leading, spacing: 8) {
+                                SectionHeader(
+                                    title: "Receipt Message",
+                                    subtitle: "Custom thank you message for donors"
+                                )
+                                
+                                ZStack(alignment: .topLeading) {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color(.secondarySystemBackground))
+                                        .frame(minHeight: 100)
+                                    
+                                    TextEditor(text: $receiptMessage)
+                                        .padding(12)
+                                        .background(Color.clear)
+                                    
+                                    if receiptMessage.isEmpty {
+                                        Text("Enter your custom thank you message...")
+                                            .foregroundStyle(.tertiary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 20)
+                                            .allowsHitTesting(false)
+                                    }
+                                }
                             }
                         }
                     }
@@ -70,7 +96,8 @@ struct EmailReceiptsView: View {
                     // Receipt Preview Card
                     ReceiptPreviewCard(
                         organizationName: organizationName.isEmpty ? "Your Organization" : organizationName,
-                        taxId: taxId.isEmpty ? "12-3456789" : taxId
+                        taxId: taxId.isEmpty ? "12-3456789" : taxId,
+                        receiptMessage: receiptMessage.isEmpty ? "Thank you for your generous donation!" : receiptMessage // 🆕 ADD THIS LINE
                     )
                     
                     // Receipt Information Card
@@ -140,6 +167,7 @@ struct EmailReceiptsView: View {
         .onAppear {
             organizationName = organizationStore.name
             taxId = organizationStore.taxId
+            receiptMessage = organizationStore.receiptMessage // 🆕 ADD THIS LINE
         }
         .overlay(alignment: .top) {
             if showToast {
@@ -160,6 +188,7 @@ struct EmailReceiptsView: View {
         
         organizationStore.name = organizationName
         organizationStore.taxId = taxId
+        organizationStore.receiptMessage = receiptMessage // 🆕 ADD THIS LINE
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             organizationStore.saveToUserDefaults()
@@ -174,6 +203,7 @@ struct EmailReceiptsView: View {
 struct ReceiptPreviewCard: View {
     let organizationName: String
     let taxId: String
+    let receiptMessage: String // 🆕 ADD THIS LINE
     
     var body: some View {
         SettingsCard(title: "Receipt Preview", icon: "doc.richtext.fill") {
@@ -215,7 +245,7 @@ struct ReceiptPreviewCard: View {
                     
                     // Footer
                     VStack(spacing: 6) {
-                        Text("Thank you for your generous donation!")
+                        Text(receiptMessage.isEmpty ? "Thank you for your generous donation!" : receiptMessage) // 🆕 CHANGE THIS LINE
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundStyle(.primary)
@@ -223,8 +253,7 @@ struct ReceiptPreviewCard: View {
                         Text("This receipt is for your tax records.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-                }
+                    }                }
                 .padding(20)
                 .background(
                     RoundedRectangle(cornerRadius: 12)

@@ -28,6 +28,8 @@ struct DonationSelectionView: View {
     @State private var isSendingReceipt = false
     @State private var orderId: String? = nil
     @State private var paymentId: String? = nil
+    @State private var receiptErrorAlertMessage: String? = nil
+    @State private var showReceiptErrorAlert = false
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
@@ -142,6 +144,13 @@ struct DonationSelectionView: View {
             HomeView()
                 .navigationBarBackButtonHidden(true)
         }
+        .alert(isPresented: $showReceiptErrorAlert) {
+            Alert(
+                title: Text("Receipt Error"),
+                message: Text(receiptErrorAlertMessage ?? "An unknown error occurred."),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .sheet(isPresented: $showingSquareAuth) {
             SquareAuthorizationView()
         }
@@ -164,7 +173,7 @@ struct DonationSelectionView: View {
                     .edgesIgnoringSafeArea(.all)
                     .blur(radius: 5)
             } else {
-                Image("organization-image")
+                Image("logoImage")
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .edgesIgnoringSafeArea(.all)
@@ -601,6 +610,9 @@ struct DonationSelectionView: View {
     }
     
     // Send receipt (unchanged)
+    // MARK: - Receipt Sending
+
+    // Call this function when the user confirms sending the receipt after email entry
     private func sendReceipt() {
         guard isEmailValid && !emailAddress.isEmpty else { return }
         
@@ -608,14 +620,121 @@ struct DonationSelectionView: View {
         print("📧 Sending receipt to: \(emailAddress)")
         print("📧 Order ID: \(orderId ?? "N/A")")
         print("📧 Payment ID: \(paymentId ?? "N/A")")
+        // Using donationViewModel.selectedAmount for DonationSelectionView
         print("📧 Amount: \(donationViewModel.selectedAmount ?? 0)")
         
-        // TODO: Implement actual receipt sending with SendGrid
-        // For now, simulate sending delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.isSendingReceipt = false
-            self.showEmailSuccessAndComplete()
+        // Create request to backend API
+        guard let url = URL(string: "\(SquareConfig.backendBaseURL)/api/receipts/send") else {
+            print("❌ Invalid receipt API URL")
+            self.handleReceiptError("Invalid server configuration. Please contact support.")
+            return
         }
+        
+        let requestBody: [String: Any] = [
+            "organization_id": SquareConfig.organizationId,
+            "donor_email": emailAddress,
+            "amount": donationViewModel.selectedAmount ?? 0, // Amount from ViewModel
+            "transaction_id": paymentId ?? "",
+            "order_id": orderId ?? "",
+            "payment_date": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30.0 // 30 second timeout
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            print("❌ Failed to serialize receipt request: \(error)")
+            self.handleReceiptError("Failed to prepare the receipt request. Please try again.")
+            return
+        }
+        
+        print("🌐 Sending receipt request to: \(url)")
+        
+        if let jsonString = String(data: request.httpBody!, encoding: .utf8) {
+            print("📤 Request body: \(jsonString)")
+        }
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                self.isSendingReceipt = false
+                
+                // Handle network errors
+                if let error = error {
+                    print("❌ Network error sending receipt: \(error.localizedDescription)")
+                    if (error as NSError).code == NSURLErrorTimedOut {
+                        self.handleReceiptError("The request timed out. Your receipt may still be sent. Please check your email or contact support if it doesn't arrive.")
+                    } else {
+                        self.handleReceiptError("A network error occurred while sending the receipt. Please check your connection and try again.")
+                    }
+                    return
+                }
+                
+                // Check HTTP response
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ Invalid response from receipt API")
+                    self.handleReceiptError("Received an invalid response from the server. Please try again.")
+                    return
+                }
+                
+                print("📧 Receipt API response: \(httpResponse.statusCode)")
+                
+                if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                    print("📥 Response body: \(responseString)")
+                }
+                
+                // Handle different status codes
+                switch httpResponse.statusCode {
+                case 200:
+                    // Success - parse response for confirmation
+                    if let data = data,
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let success = json["success"] as? Bool,
+                       success {
+                        print("✅ Receipt sent successfully")
+                        if let receiptId = json["receipt_id"] as? String {
+                            print("📧 Receipt ID: \(receiptId)")
+                        }
+                        self.showEmailSuccessAndComplete() // Assumes this exists in DonationSelectionView
+                    } else {
+                        print("⚠️ Unexpected success response format from server.")
+                        // Still proceed as if successful, or show a specific message
+                        self.showEmailSuccessAndComplete()
+                    }
+                    
+                case 400:
+                    print("❌ Bad request (400). Possible issue with data sent.")
+                    self.handleReceiptError("There was an issue with the information provided for the receipt (e.g., invalid email). Please check and try again.")
+                    
+                case 404:
+                    print("❌ Organization not found (404) or API endpoint not found.")
+                    self.handleReceiptError("The receipt service for this organization is not configured correctly. Please contact support.")
+                    
+                case 429:
+                    print("❌ Rate limited (429). Too many requests.")
+                    self.handleReceiptError("We've received too many requests. Please try sending the receipt again in a few moments.")
+                    
+                case 500...599:
+                    print("❌ Server error (\(httpResponse.statusCode))")
+                    self.handleReceiptError("A server error occurred while sending the receipt. Your donation was processed, but the receipt may be delayed. Please contact support if it doesn't arrive.")
+                    
+                default:
+                    print("❌ Unexpected status code: \(httpResponse.statusCode)")
+                    self.handleReceiptError("An unexpected error occurred while sending the receipt (Code: \(httpResponse.statusCode)). Please try again or contact support.")
+                }
+            }
+        }.resume()
+    }
+
+    // Add this function to handle receipt errors by showing an alert
+    private func handleReceiptError(_ message: String) {
+        print("🔴 Receipt Error: \(message)")
+        self.receiptErrorAlertMessage = message
+        self.showReceiptErrorAlert = true
+        // self.isSendingReceipt = false // Already set at the beginning of the URLSession completion
     }
     
     // Show email success and complete (unchanged)

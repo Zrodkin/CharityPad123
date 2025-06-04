@@ -143,13 +143,13 @@ struct HomeView: View {
                     .aspectRatio(contentMode: .fill)
                     .edgesIgnoringSafeArea(.all)
             } else {
-                Image("organization-image")
+                Image("logoImage")
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .edgesIgnoringSafeArea(.all)
                     .onAppear {
-                        if UIImage(named: "organization-image") == nil {
-                            print("Warning: 'organization-image' not found in asset catalog.")
+                        if UIImage(named: "logoImage") == nil {
+                            print("Warning: 'logoImage' not found in asset catalog.")
                         }
                     }
             }
@@ -161,14 +161,14 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 Spacer()
                     .frame(height: KioskLayoutConstants.topContentOffset)
-                
-                VStack(spacing: 20) {
+
+                VStack(spacing: 10) { // This is the VStack we'll offset
                     Text(kioskStore.headline)
                         .font(.system(size: 90, weight: .bold))
                         .foregroundColor(.white)
                         .shadow(radius: 10)
                         .multilineTextAlignment(.center)
-                    
+
                     if !kioskStore.subtext.isEmpty {
                         Text(kioskStore.subtext)
                             .font(.system(size: 30))
@@ -179,10 +179,12 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
                 .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
-                
+                .offset(y: -30) // <<---- ADD THIS LINE (adjust -20 as needed)
+
                 Spacer()
                     .frame(height: KioskLayoutConstants.bottomSafeArea)
             }
+
         }
              .contentShape(Rectangle())
          }

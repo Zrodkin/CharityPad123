@@ -38,7 +38,7 @@ struct UpdatedCustomAmountView: View {
                     .edgesIgnoringSafeArea(.all)
                     .blur(radius: 5)
             } else {
-                Image("organization-image")
+                Image("logoImage")
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .edgesIgnoringSafeArea(.all)
@@ -511,56 +511,56 @@ struct UpdatedCustomAmountView: View {
     }
     
     private func handleDone() {
-        guard !isProcessingPayment else {
-            return
-        }
-        
-        guard let amount = Double(amountString), amount > 0 else {
-            if amountString.isEmpty {
-                withAnimation(.interpolatingSpring(stiffness: 600, damping: 5)) {
-                    shakeAmount()
-                }
-                
-                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                impactFeedback.impactOccurred()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    impactFeedback.impactOccurred()
-                }
-                
+            guard !isProcessingPayment else {
                 return
-            } else {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    errorMessage = "Please enter a valid amount"
+            }
+            
+            guard let amount = Double(amountString), amount > 0 else {
+                if amountString.isEmpty {
+                    withAnimation(.interpolatingSpring(stiffness: 600, damping: 5)) {
+                        shakeAmount()
+                    }
+                    
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                    impactFeedback.impactOccurred()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        impactFeedback.impactOccurred()
+                    }
+                    
+                    return
+                } else {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        errorMessage = "Please enter a valid amount"
+                    }
                 }
+                return
             }
-            return
-        }
-        
-        if let minAmount = Double(kioskStore.minAmount), amount < minAmount {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                errorMessage = "Minimum amount is $\(Int(minAmount))"
+            
+            if let minAmount = Double(kioskStore.minAmount), amount < minAmount {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    errorMessage = "Minimum amount is $\(Int(minAmount))"
+                }
+                return
             }
-            return
-        }
-        
-        if let maxAmount = Double(kioskStore.maxAmount), amount > maxAmount {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                errorMessage = "Maximum amount is $\(Int(maxAmount))"
+            
+            if let maxAmount = Double(kioskStore.maxAmount), amount > maxAmount {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    errorMessage = "Maximum amount is $\(Int(maxAmount))"
+                }
+                return
             }
-            return
+            
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+            
+            selectedAmount = amount
+            donationViewModel.selectedAmount = amount
+            donationViewModel.isCustomAmount = true
+            
+            onAmountSelected(amount)
+            
+            processPayment(amount: amount, isCustomAmount: true)
         }
-        
-        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-        impactFeedback.impactOccurred()
-        
-        selectedAmount = amount
-        donationViewModel.selectedAmount = amount
-        donationViewModel.isCustomAmount = true
-        
-        onAmountSelected(amount)
-        
-        processPayment(amount: amount, isCustomAmount: true)
-    }
     
     // 🔧 FIXED: Updated processPayment method to handle cancellations properly
     private func processPayment(amount: Double, isCustomAmount: Bool) {
@@ -646,35 +646,163 @@ struct UpdatedCustomAmountView: View {
         isEmailValid = emailPredicate.evaluate(with: email)
     }
     
+    // 🆕 Send receipt via backend API with proper error handling
     private func sendReceipt() {
         guard isEmailValid && !emailAddress.isEmpty else { return }
         
         isSendingReceipt = true
+        print("📧 Sending receipt to: \(emailAddress)")
+        print("📧 Order ID: \(orderId ?? "N/A")")
+        print("📧 Payment ID: \(paymentId ?? "N/A")")
+        // FIX 1: Use self.selectedAmount
+        print("📧 Amount: $\(self.selectedAmount)")
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.isSendingReceipt = false
-            self.showEmailSuccessAndComplete()
+        guard let url = URL(string: "\(SquareConfig.backendBaseURL)/api/receipts/send") else {
+            print("❌ Invalid receipt API URL")
+            // FIX 2: Call the new handleReceiptError function
+            self.handleReceiptError("Invalid server configuration")
+            return
         }
+        
+        let requestBody: [String: Any] = [
+            "organization_id": SquareConfig.organizationId,
+            "donor_email": emailAddress,
+            // FIX 1: Use self.selectedAmount
+            "amount": self.selectedAmount,
+            "transaction_id": paymentId ?? "",
+            "order_id": orderId ?? "",
+            "payment_date": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30.0
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            print("❌ Failed to serialize receipt request: \(error)")
+            // FIX 2: Call the new handleReceiptError function
+            self.handleReceiptError("Failed to prepare request")
+            return
+        }
+        
+        print("🌐 Sending receipt request to: \(url)")
+        
+        if let jsonString = String(data: request.httpBody!, encoding: .utf8) {
+            print("📤 Request body: \(jsonString)")
+        }
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                self.isSendingReceipt = false
+                
+                if let error = error {
+                    print("❌ Network error sending receipt: \(error.localizedDescription)")
+                    if (error as NSError).code == NSURLErrorTimedOut {
+                        // FIX 2: Call the new handleReceiptError function
+                        self.handleReceiptError("Request timed out. Receipt may still be sent.")
+                    } else {
+                        // FIX 2: Call the new handleReceiptError function
+                        self.handleReceiptError("Network error occurred")
+                    }
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ Invalid response from receipt API")
+                    // FIX 2: Call the new handleReceiptError function
+                    self.handleReceiptError("Invalid server response")
+                    return
+                }
+                
+                print("📧 Receipt API response: \(httpResponse.statusCode)")
+                
+                if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                    print("📥 Response body: \(responseString)")
+                }
+                
+                switch httpResponse.statusCode {
+                case 200:
+                    if let data = data,
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let success = json["success"] as? Bool,
+                       success {
+                        print("✅ Receipt sent successfully")
+                        if let receiptId = json["receipt_id"] as? String {
+                            print("📧 Receipt ID: \(receiptId)")
+                        }
+                        self.showEmailSuccessAndComplete()
+                    } else {
+                        print("⚠️ Unexpected success response format")
+                        self.showEmailSuccessAndComplete()
+                    }
+                case 400:
+                    print("❌ Bad request (400)")
+                    // FIX 2: Call the new handleReceiptError function
+                    self.handleReceiptError("Invalid email or request")
+                case 404:
+                    print("❌ Organization not found (404)")
+                    // FIX 2: Call the new handleReceiptError function
+                    self.handleReceiptError("Organization not configured")
+                case 429:
+                    print("❌ Rate limited (429)")
+                    // FIX 2: Call the new handleReceiptError function
+                    self.handleReceiptError("Too many requests. Please try again later.")
+                case 500...599:
+                    print("❌ Server error (\(httpResponse.statusCode))")
+                    // FIX 2: Call the new handleReceiptError function
+                    self.handleReceiptError("Server error. Receipt may be delayed.")
+                default:
+                    print("❌ Unexpected status code: \(httpResponse.statusCode)")
+                    // FIX 2: Call the new handleReceiptError function
+                    self.handleReceiptError("Unexpected error occurred")
+                }
+            }
+        }.resume()
     }
     
+    
+    private func handleReceiptError(_ message: String) {
+        // You can use an existing @State variable for showing alerts/messages
+        // or create a new one specifically for receipt errors.
+        // For now, let's reuse the existing errorMessage and assume you have a way to display it.
+        // You might want to show an Alert.
+        print("🔴 Receipt Error: \(message)")
+        self.errorMessage = message // This will show the error message in your existing error display area.
+        // Consider adding a @State var to trigger an Alert.
+        
+        // Optionally, decide if you still want to proceed to showEmailSuccessAndComplete
+        // or keep the user on the email entry screen to try again or see the error.
+        // For a critical error, you might not call showEmailSuccessAndComplete().
+        // For a timeout where it might have been sent, you might.
+        // For this example, we're just setting the message. You'll need to decide the UX.
+        // For instance, after setting the error, you might want to keep showingEmailEntry = true
+        // and not call showEmailSuccessAndComplete().
+        
+        // Example: Forcing the email entry view to stay if there's an error
+        // self.showingEmailEntry = true
+        // self.isSendingReceipt = false // Ensure button is re-enabled
+    }
+    
+    // Ensure this function exists and handles UI appropriately
     private func showEmailSuccessAndComplete() {
         showingEmailEntry = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.handleSuccessfulCompletion()
+            self.handleSuccessfulCompletion() // Navigates home or dismisses
         }
     }
-    
     private func shakeAmount() {
-        let shakeSequence: [CGFloat] = [0, -8, 8, -6, 6, -4, 4, -2, 2, 0]
-        
-        for (index, offset) in shakeSequence.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.05) {
-                shakeOffset = offset
+            let shakeSequence: [CGFloat] = [0, -8, 8, -6, 6, -4, 4, -2, 2, 0]
+            
+            for (index, offset) in shakeSequence.enumerated() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.05) {
+                    shakeOffset = offset
+                }
             }
         }
-    }
 }
-
 // MARK: - Supporting Components
 
 struct KeypadButton: View {

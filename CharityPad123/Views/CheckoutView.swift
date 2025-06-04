@@ -32,6 +32,8 @@ struct CheckoutView: View {
     @State private var emailAddress = ""
     @State private var isEmailValid = false
     @State private var isSendingReceipt = false
+    @State private var receiptErrorAlertMessage: String? = nil
+    @State private var showReceiptErrorAlert = false
     
     // Processing state enum
     enum ProcessingState {
@@ -173,6 +175,13 @@ struct CheckoutView: View {
                 }
             }
         }
+        .alert(isPresented: $showReceiptErrorAlert) {
+                    Alert(
+                        title: Text("Send Receipt Failed"),
+                        message: Text(receiptErrorAlertMessage ?? "An unexpected error occurred while trying to send your receipt."),
+                        dismissButton: .default(Text("OK"))
+                    )
+                }
         .sheet(isPresented: $showingSquareAuth) {
             SquareAuthorizationView()
         }
@@ -581,16 +590,18 @@ struct CheckoutView: View {
     }
     
     private func resetPaymentState() {
-        processingState = .ready
-        showingThankYou = false
-        showingReceiptPrompt = false
-        showingEmailEntry = false
-        orderId = nil
-        paymentId = nil
-        emailAddress = ""
-        isEmailValid = false
-        isSendingReceipt = false
-    }
+            processingState = .ready
+            showingThankYou = false
+            showingReceiptPrompt = false
+            showingEmailEntry = false
+            orderId = nil
+            paymentId = nil
+            emailAddress = ""
+            isEmailValid = false
+            isSendingReceipt = false
+            receiptErrorAlertMessage = nil
+            showReceiptErrorAlert = false
+        }
     
     // 🆕 Email validation
     private func validateEmail(_ email: String) {
@@ -599,22 +610,123 @@ struct CheckoutView: View {
         isEmailValid = emailPredicate.evaluate(with: email)
     }
     
-    // 🆕 Send receipt (placeholder for backend integration)
+   
+    // 🆕 Send receipt via backend API with proper error handling
     private func sendReceipt() {
         guard isEmailValid && !emailAddress.isEmpty else { return }
         
         isSendingReceipt = true
         print("📧 Sending receipt to: \(emailAddress)")
-        print("📧 Order ID: \(orderId ?? "N/A")")
-        print("📧 Payment ID: \(paymentId ?? "N/A")")
-        print("📧 Amount: $\(amount)")
         
-        // TODO: Implement actual receipt sending with SendGrid
-        // For now, simulate sending delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.isSendingReceipt = false
-            self.showEmailSuccessAndComplete()
+        // Create request to backend API
+        guard let url = URL(string: "\(SquareConfig.backendBaseURL)/api/receipts/send") else {
+            print("❌ Invalid receipt API URL")
+            handleReceiptError("Invalid server configuration")
+            return
         }
+        
+        let requestBody: [String: Any] = [
+            "organization_id": SquareConfig.organizationId,
+            "donor_email": emailAddress,
+            "amount": amount,
+            "transaction_id": paymentId ?? "",
+            "order_id": orderId ?? "",
+            "payment_date": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30.0 // 30 second timeout
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            print("❌ Failed to serialize receipt request: \(error)")
+            handleReceiptError("Failed to prepare request")
+            return
+        }
+        
+        print("🌐 Sending receipt request to: \(url)")
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                // 🔧 FIX: Removed [weak self] since structs don't support weak references
+                // Instead, we'll capture the current state values we need
+                
+                self.isSendingReceipt = false
+                
+                // Handle network errors
+                if let error = error {
+                    print("❌ Network error sending receipt: \(error.localizedDescription)")
+                    if (error as NSError).code == NSURLErrorTimedOut {
+                        self.handleReceiptError("Request timed out. Receipt may still be sent.")
+                    } else {
+                        self.handleReceiptError("Network error occurred")
+                    }
+                    return
+                }
+                
+                // Check HTTP response
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ Invalid response from receipt API")
+                    self.handleReceiptError("Invalid server response")
+                    return
+                }
+                
+                print("📧 Receipt API response: \(httpResponse.statusCode)")
+                
+                // Handle different status codes
+                switch httpResponse.statusCode {
+                case 200:
+                    // Success - parse response for confirmation
+                    if let data = data,
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let success = json["success"] as? Bool,
+                       success {
+                        print("✅ Receipt sent successfully")
+                        self.showEmailSuccessAndComplete()
+                    } else {
+                        print("⚠️ Unexpected success response format")
+                        self.showEmailSuccessAndComplete() // Still treat as success
+                    }
+                    
+                case 400:
+                    print("❌ Bad request (400)")
+                    self.handleReceiptError("Invalid email or request")
+                    
+                case 404:
+                    print("❌ Organization not found (404)")
+                    self.handleReceiptError("Organization not configured")
+                    
+                case 429:
+                    print("❌ Rate limited (429)")
+                    self.handleReceiptError("Too many requests. Please try again later.")
+                    
+                case 500...599:
+                    print("❌ Server error (\(httpResponse.statusCode))")
+                    self.handleReceiptError("Server error. Receipt may be delayed.")
+                    
+                default:
+                    print("❌ Unexpected status code: \(httpResponse.statusCode)")
+                    self.handleReceiptError("Unexpected error occurred")
+                }
+            }
+        }.resume()
+    }
+    
+    // 🆕 Handle receipt errors with user feedback
+    private func handleReceiptError(_ message: String) {
+            print("📧 Receipt error: \(message)") // Keep for debugging
+            self.receiptErrorAlertMessage = message
+            self.showReceiptErrorAlert = true
+            // self.isSendingReceipt = false; // Ensure this is false if the process is truly stopped.
+                                            // It's already set to false in the URLSession completion handler.
+        }
+
+    // 🆕 Show brief error message but continue
+    private func showEmailErrorThenComplete() {
+        handleReceiptError("Email service temporarily unavailable")
     }
     
     // 🆕 Show email success and complete
@@ -640,3 +752,4 @@ struct EmailTextFieldStyle: TextFieldStyle {
             .foregroundColor(.black)
     }
 }
+
