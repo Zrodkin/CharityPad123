@@ -5,6 +5,7 @@ struct UpdatedCustomAmountView: View {
     @EnvironmentObject var donationViewModel: DonationViewModel
     @EnvironmentObject var squareAuthService: SquareAuthService
     @EnvironmentObject var paymentService: SquarePaymentService
+    @EnvironmentObject private var organizationStore: OrganizationStore
     @Environment(\.dismiss) private var dismiss
     @State private var amountString: String = ""
     @State private var errorMessage: String? = nil
@@ -149,6 +150,24 @@ struct UpdatedCustomAmountView: View {
                         }
                         .disabled(isProcessingPayment)
                     }
+                    
+                    // ✅ ADD THE TEST BUTTON HERE:
+                   // #if DEBUG
+                  //  Button("🧪 Test Receipt") {
+                        // Simulate successful payment data
+                      //  self.orderId = "test_order_123"
+                       // self.paymentId = "test_payment_456"
+                       // self.selectedAmount = 25.0
+                        
+                        // Show receipt prompt
+                    // self.showingReceiptPrompt = true
+                    //}
+                    //.padding()
+                    //     .background(Color.orange)
+                    // .foregroundColor(.white)
+                    // .cornerRadius(8)
+                    // .padding(.top, 12) // Add some spacing from keypad
+                    // #endif
                 }
                 .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
                 .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
@@ -195,18 +214,7 @@ struct UpdatedCustomAmountView: View {
                 paymentService.connectToReader()
             }
         }
-        .navigationDestination(isPresented: $navigateToCheckout) {
-            CheckoutView(
-                amount: selectedAmount,
-                isCustomAmount: true,
-                onDismiss: {
-                    navigateToCheckout = false
-                },
-                onNavigateToHome: {
-                    handleNavigateToHome()
-                }
-            )
-        }
+        
         .navigationDestination(isPresented: $navigateToHome) {
             HomeView()
                 .navigationBarBackButtonHidden(true)
@@ -667,11 +675,13 @@ struct UpdatedCustomAmountView: View {
         let requestBody: [String: Any] = [
             "organization_id": SquareConfig.organizationId,
             "donor_email": emailAddress,
-            // FIX 1: Use self.selectedAmount
             "amount": self.selectedAmount,
             "transaction_id": paymentId ?? "",
             "order_id": orderId ?? "",
-            "payment_date": ISO8601DateFormatter().string(from: Date())
+            "payment_date": ISO8601DateFormatter().string(from: Date()),
+            "organization_name": organizationStore.name,
+            "organization_tax_id": organizationStore.taxId,
+            "organization_receipt_message": organizationStore.receiptMessage
         ]
         
         var request = URLRequest(url: url)
@@ -847,6 +857,19 @@ struct KeypadButtonStyle: ButtonStyle {
     }
 }
 
+struct EmailTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .font(.title3)                    // ← Text size
+            .padding(.horizontal, 20)         // ← Spacing
+            .padding(.vertical, 16)           // ← Spacing
+            .background(                      // ← White background
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white)
+            )
+            .foregroundColor(.black)          // ← Text color
+    }
+}
 
 
 struct UpdatedCustomAmountView_Previews: PreviewProvider {

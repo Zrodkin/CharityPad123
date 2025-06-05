@@ -1,6 +1,3 @@
-// Add this to your DonationSelectionView.swift
-// Updated to handle custom amount cancellations and navigate to home
-
 import SwiftUI
 
 struct DonationSelectionView: View {
@@ -9,6 +6,7 @@ struct DonationSelectionView: View {
     @EnvironmentObject var squareAuthService: SquareAuthService
     @EnvironmentObject var catalogService: SquareCatalogService
     @EnvironmentObject var paymentService: SquarePaymentService
+    @EnvironmentObject private var organizationStore: OrganizationStore
     
     @State private var navigateToCustomAmount = false
     @State private var navigateToCheckout = false
@@ -32,6 +30,7 @@ struct DonationSelectionView: View {
     @State private var showReceiptErrorAlert = false
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         ZStack {
@@ -93,7 +92,19 @@ struct DonationSelectionView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(false)
+        .navigationBarBackButtonHidden(true)
+        .toolbar { // << ADD THIS ENTIRE .toolbar MODIFIER BLOCK
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    dismiss() // This is the simple action, just like in UpdatedCustomAmountView
+                }) {
+                    Image(systemName: "chevron.left")
+                        .foregroundColor(.white)
+                        .padding(8)
+                        .background(Circle().fill(Color.white.opacity(0.2)))
+                }
+            }
+        }
         .onAppear {
             // 🔧 NEW: Handle navigation to home if returning from cancelled custom amount
             if shouldNavigateToHomeOnAppear {
@@ -128,18 +139,7 @@ struct DonationSelectionView: View {
                 }
             }
         }
-        .navigationDestination(isPresented: $navigateToCheckout) {
-            CheckoutView(
-                amount: donationViewModel.selectedAmount ?? 0,
-                isCustomAmount: donationViewModel.isCustomAmount,
-                onDismiss: {
-                    handleCheckoutDismiss()
-                },
-                onNavigateToHome: {
-                    handleNavigateToHome()
-                }
-            )
-        }
+       
         .navigationDestination(isPresented: $navigateToHome) {
             HomeView()
                 .navigationBarBackButtonHidden(true)
@@ -186,7 +186,7 @@ struct DonationSelectionView: View {
         Button(action: {
             handleCustomAmountButtonPress()
         }) {
-            Text("Custom")
+            Text("Custom Amount")
                 .font(.system(size: horizontalSizeClass == .regular ? KioskLayoutConstants.buttonFontSize : KioskLayoutConstants.buttonFontSizeCompact, weight: .semibold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -395,7 +395,6 @@ struct DonationSelectionView: View {
                 .padding(.horizontal, 40)
                 
                 VStack(spacing: 16) {
-                    // Send button
                     Button(action: sendReceipt) {
                         HStack {
                             if isSendingReceipt {
@@ -408,13 +407,13 @@ struct DonationSelectionView: View {
                                 Text("Send Receipt")
                             }
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(isEmailValid && !isSendingReceipt ? Color.green : Color.gray)
-                        .foregroundColor(.white)
-                        .font(.headline)
-                        .cornerRadius(12)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(isEmailValid && !isSendingReceipt ? Color.green : Color.gray)
+                    .foregroundColor(.white)
+                    .font(.headline)
+                    .cornerRadius(12)
                     .disabled(!isEmailValid || isSendingReceipt)
                     
                     // Back button
@@ -633,10 +632,13 @@ struct DonationSelectionView: View {
         let requestBody: [String: Any] = [
             "organization_id": SquareConfig.organizationId,
             "donor_email": emailAddress,
-            "amount": donationViewModel.selectedAmount ?? 0, // Amount from ViewModel
+            "amount": donationViewModel.selectedAmount ?? 0,
             "transaction_id": paymentId ?? "",
             "order_id": orderId ?? "",
-            "payment_date": ISO8601DateFormatter().string(from: Date())
+            "payment_date": ISO8601DateFormatter().string(from: Date()),
+            "organization_name": organizationStore.name,
+            "organization_tax_id": organizationStore.taxId,
+            "organization_receipt_message": organizationStore.receiptMessage
         ]
         
         var request = URLRequest(url: url)

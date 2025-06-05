@@ -9,7 +9,7 @@ import SwiftUI
 
 struct KioskLayoutConstants {
     // Consistent spacing and positioning
-    static let topContentOffset: CGFloat = 60        // Distance from top to main content
+    static let topContentOffset: CGFloat = 20         // Distance from top to main content       
     static let titleBottomSpacing: CGFloat = 40       // Space below main title
     static let contentHorizontalPadding: CGFloat = 20 // Side margins
     static let maxContentWidth: CGFloat = 800         // Max width for content
