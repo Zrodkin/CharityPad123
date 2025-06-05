@@ -513,11 +513,17 @@ struct DonationSelectionView: View {
             return
         }
         
-        // Check reader connection - if no reader, silently go back to home
-        if !paymentService.isReaderConnected {
-            print("🔇 No reader connected - silently navigating to home")
-            handleSilentFailureOrCancellation()
+        // NEW: Check authentication but don't fail on reader connectivity
+        if !squareAuthService.isAuthenticated {
+            print("❌ Cannot process payments - authentication issue")
+            showingSquareAuth = true
             return
+        }
+
+        // Check reader connection - warn but allow to continue for graceful degradation
+        if !paymentService.isReaderConnected {
+            print("⚠️ No reader connected - will attempt to connect during payment")
+            // Don't return here - let the payment service handle reader connection
         }
         
         resetPaymentState()

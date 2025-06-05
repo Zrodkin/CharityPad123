@@ -53,6 +53,8 @@ class SquarePaymentService: NSObject, ObservableObject {
         
         super.init()
         
+        authService.setPaymentService(self)
+        
         // Configure services with dependencies
         self.sdkInitializationService.configure(with: authService, paymentService: self)
         self.permissionService.configure(with: self)
@@ -406,11 +408,53 @@ class SquarePaymentService: NSObject, ObservableObject {
     }
     
     @objc private func handleAuthenticationSuccess(_ notification: Notification) {
-        DispatchQueue.main.async {
-            self.initializeSDK()
-        }
-    }
-}
+          DispatchQueue.main.async {
+              self.initializeSDK()
+          }
+      }
+      
+      // MARK: - Health Check Methods
+      
+      /// Check if payment system is fully healthy
+      func performHealthCheck() {
+          print("🏥 Performing payment system health check...")
+          
+          guard authService.isAuthenticated else {
+              print("🚨 Health check: Not authenticated")
+              return
+          }
+          
+          // Check SDK authorization
+          if !isSDKAuthorized() {
+              print("🚨 Health check failed: SDK not authorized despite being authenticated")
+              authService.forceCompleteLogout()
+              return
+          }
+          
+          // Check if we can at least attempt reader operations
+          if !canAttemptReaderOperations() {
+              print("🚨 Health check failed: Cannot perform reader operations")
+              authService.forceCompleteLogout()
+              return
+          }
+          
+          print("✅ Payment system health check passed")
+      }
+      
+      /// Check if we can attempt reader operations
+      private func canAttemptReaderOperations() -> Bool {
+          // At minimum, we should be able to access Square's reader management
+          return isSDKAuthorized() && authService.locationId != nil
+      }
+      
+      /// Schedule regular health checks
+      func startHealthCheckMonitoring() {
+          // Check health every 30 seconds when app is active
+          Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+              self?.performHealthCheck()
+          }
+      }
+  } 
 
 // MARK: - PaymentManagerDelegate Implementation
 

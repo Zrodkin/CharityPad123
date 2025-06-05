@@ -25,6 +25,8 @@ struct UpdatedCustomAmountView: View {
     @State private var isSendingReceipt = false
     @State private var orderId: String? = nil
     @State private var paymentId: String? = nil
+    @State private var receiptErrorAlertMessage: String? = nil
+    @State private var showReceiptErrorAlert = false
     
     // Callback for when amount is selected
     var onAmountSelected: (Double) -> Void
@@ -151,23 +153,23 @@ struct UpdatedCustomAmountView: View {
                         .disabled(isProcessingPayment)
                     }
                     
-                    // ✅ ADD THE TEST BUTTON HERE:
-                   // #if DEBUG
-                  //  Button("🧪 Test Receipt") {
+                    // ✅ FIXED TEST BUTTON:
+                    #if DEBUG
+                    Button("🧪 Test Receipt") {
                         // Simulate successful payment data
-                      //  self.orderId = "test_order_123"
-                       // self.paymentId = "test_payment_456"
-                       // self.selectedAmount = 25.0
+                        self.orderId = "test_order_123"
+                        self.paymentId = "test_payment_456"
+                        self.selectedAmount = 25.0
                         
                         // Show receipt prompt
-                    // self.showingReceiptPrompt = true
-                    //}
-                    //.padding()
-                    //     .background(Color.orange)
-                    // .foregroundColor(.white)
-                    // .cornerRadius(8)
-                    // .padding(.top, 12) // Add some spacing from keypad
-                    // #endif
+                        self.showingReceiptPrompt = true
+                    }
+                    .padding()
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                    .padding(.top, 12) // Add some spacing from keypad
+                    #endif
                 }
                 .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
                 .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
@@ -577,9 +579,14 @@ struct UpdatedCustomAmountView: View {
             return
         }
         
-        if !paymentService.isReaderConnected {
-            handleSilentFailureOrCancellation()
+        if !squareAuthService.isAuthenticated {
+            showingSquareAuth = true
             return
+        }
+
+        if !paymentService.isReaderConnected {
+            print("⚠️ No reader connected - will attempt to connect during payment")
+            // Don't return here - let the payment service handle reader connection
         }
         
         resetPaymentState()

@@ -57,8 +57,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
+
 // Add a notification name for the OAuth callback
 extension Notification.Name {
   static let squareOAuthCallback = Notification.Name("SquareOAuthCallback")
   static let squareAuthenticationSuccessful = Notification.Name("SquareAuthenticationSuccessful")
+  static let forceReturnToOnboarding = Notification.Name("ForceReturnToOnboarding") // NEW
 }

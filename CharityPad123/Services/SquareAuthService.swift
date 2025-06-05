@@ -6,6 +6,19 @@ class SquareAuthService: ObservableObject {
     @Published var isAuthenticating = false
     @Published var authError: String? = nil
     
+    // NEW: Add token validation status separate from reader connectivity
+    @Published var tokenStatus: TokenValidationStatus = .unknown
+    @Published var lastTokenCheck: Date? = nil
+    
+    enum TokenValidationStatus {
+        case unknown
+        case validLocal      // Tokens exist locally and haven't expired
+        case validRemote     // Tokens validated with Square API
+        case expired         // Tokens exist but expired
+        case invalid         // Tokens don't work with Square API
+        case networkError    // Can't reach server to validate
+    }
+    
     // Store tokens in UserDefaults (in a real app, use Keychain for better security)
     private let accessTokenKey = "squareAccessToken"
     private let refreshTokenKey = "squareRefreshToken"
@@ -51,6 +64,57 @@ class SquareAuthService: ObservableObject {
     var organizationId: String {
         get { UserDefaults.standard.string(forKey: organizationIdKey) ?? SquareConfig.organizationId }
         set { UserDefaults.standard.set(newValue, forKey: organizationIdKey) }
+    }
+
+    // NEW: Add reference to payment service for health checks
+    private weak var paymentService: SquarePaymentService?
+
+    /// Set payment service reference for health checks
+    func setPaymentService(_ service: SquarePaymentService) {
+        self.paymentService = service
+    }
+
+    /// Check if we're FULLY authenticated (tokens + SDK + location + ready for payments)
+    func isFullyAuthenticated() -> Bool {
+        print("🔍 Checking full authentication status...")
+        
+        // Must have basic auth
+        guard isAuthenticated else {
+            print("❌ Not basically authenticated")
+            return false
+        }
+        
+        // Must have all required data
+        guard let _ = accessToken,
+              let _ = locationId,
+              let _ = merchantId else {
+            print("❌ Missing required auth data (token/location/merchant)")
+            return false
+        }
+        
+        // Must have SDK properly initialized
+        guard let paymentService = self.paymentService,
+              paymentService.isSDKAuthorized() else {
+            print("❌ SDK not properly authorized")
+            return false
+        }
+        
+        print("✅ Fully authenticated and ready")
+        return true
+    }
+
+    /// Force complete logout and return to onboarding
+    func forceCompleteLogout() {
+        print("🚨 Forcing complete logout due to incomplete authentication")
+        
+        // Clear all local data
+        clearLocalAuthData()
+        
+        // Force return to onboarding
+        UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        
+        // Post notification to refresh UI
+        NotificationCenter.default.post(name: Notification.Name("ForceReturnToOnboarding"), object: nil)
     }
     
     init() {
