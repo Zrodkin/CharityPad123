@@ -176,6 +176,8 @@ class SquarePaymentService: NSObject, ObservableObject {
         }
     }
     
+    
+    
     // MARK: - UNIFIED Payment Processing (Order-Based)
     
     /// Process payment using Square's order system
@@ -454,7 +456,7 @@ class SquarePaymentService: NSObject, ObservableObject {
               self?.performHealthCheck()
           }
       }
-  } 
+  }
 
 // MARK: - PaymentManagerDelegate Implementation
 

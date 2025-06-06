@@ -153,23 +153,7 @@ struct UpdatedCustomAmountView: View {
                         .disabled(isProcessingPayment)
                     }
                     
-                    // ✅ FIXED TEST BUTTON:
-                    #if DEBUG
-                    Button("🧪 Test Receipt") {
-                        // Simulate successful payment data
-                        self.orderId = "test_order_123"
-                        self.paymentId = "test_payment_456"
-                        self.selectedAmount = 25.0
-                        
-                        // Show receipt prompt
-                        self.showingReceiptPrompt = true
-                    }
-                    .padding()
-                    .background(Color.orange)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                    .padding(.top, 12) // Add some spacing from keypad
-                    #endif
+                    
                 }
                 .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
                 .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
