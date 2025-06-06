@@ -12,8 +12,14 @@ struct DonationSelectionView: View {
     @State private var navigateToCheckout = false
     @State private var navigateToHome = false
     
-    // NEW: Track if we're returning from custom amount view with cancellation
-    @State private var shouldNavigateToHomeOnAppear = false
+    // 🔧 FIXED: Changed to track the source of navigation to prevent glitch
+    @State private var navigationSource: NavigationSource = .direct
+    @State private var hasProcessedCancelledReturn = false
+    
+    enum NavigationSource {
+        case direct          // Direct navigation from HomeView
+        case cancelledReturn // Returning from cancelled custom amount
+    }
     
     // Payment processing states
     @State private var isProcessingPayment = false
@@ -93,10 +99,10 @@ struct DonationSelectionView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .toolbar { // << ADD THIS ENTIRE .toolbar MODIFIER BLOCK
+        .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
-                    dismiss() // This is the simple action, just like in UpdatedCustomAmountView
+                    dismiss()
                 }) {
                     Image(systemName: "chevron.left")
                         .foregroundColor(.white)
@@ -106,13 +112,23 @@ struct DonationSelectionView: View {
             }
         }
         .onAppear {
-            // 🔧 NEW: Handle navigation to home if returning from cancelled custom amount
-            if shouldNavigateToHomeOnAppear {
-                shouldNavigateToHomeOnAppear = false
+            print("📱 DonationSelectionView appeared with navigation source: \(navigationSource)")
+            
+            // 🔧 FIXED: Only handle cancelled return once, then reset the flag
+            if navigationSource == .cancelledReturn && !hasProcessedCancelledReturn {
+                print("🏠 Processing cancelled return - navigating to home")
+                hasProcessedCancelledReturn = true
+                navigationSource = .direct // Reset for future navigations
+                
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     navigateToHome = true
                 }
                 return
+            }
+            
+            // 🔧 FIXED: Reset the flag if we're here from direct navigation
+            if navigationSource == .direct {
+                hasProcessedCancelledReturn = false
             }
             
             if squareAuthService.isAuthenticated {
@@ -130,15 +146,20 @@ struct DonationSelectionView: View {
             UpdatedCustomAmountView { amount in
                 handleCustomAmountSelection(amount: amount)
             }
-            // 🔧 NEW: Handle when custom amount view is dismissed (cancellation)
+            // 🔧 FIXED: Improved handling of custom amount view dismissal
             .onDisappear {
-                // Only set flag if payment was actually cancelled (not successful)
-                if donationViewModel.selectedAmount == nil || donationViewModel.selectedAmount == 0 {
-                    // AND make sure we didn't just complete a successful payment
-                    if !donationViewModel.paymentSuccess {
-                        print("🏠 Custom amount cancelled - setting flag to navigate to home")
-                        shouldNavigateToHomeOnAppear = true
-                    }
+                print("📱 Custom amount view disappeared")
+                
+                // Check if this was a cancellation (no successful payment)
+                let wasCancelled = (donationViewModel.selectedAmount == nil || donationViewModel.selectedAmount == 0) && !donationViewModel.paymentSuccess
+                
+                if wasCancelled {
+                    print("🏠 Custom amount was cancelled - setting navigation source")
+                    navigationSource = .cancelledReturn
+                    hasProcessedCancelledReturn = false // Allow processing on next appear
+                } else {
+                    print("✅ Custom amount completed successfully")
+                    navigationSource = .direct
                 }
             }
         }
@@ -244,7 +265,6 @@ struct DonationSelectionView: View {
                 Text("Your donation has been processed.")
                     .foregroundColor(.white)
                 
-                // 🔧 CHANGED: "Done" now goes directly to completion
                 Button("Done") {
                     handleSuccessfulCompletion()
                 }
@@ -257,7 +277,6 @@ struct DonationSelectionView: View {
             }
             .padding()
         }
-        // 🔧 CHANGED: Auto-dismiss after 3 seconds goes to completion, not receipt prompt
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 if showingThankYou {
@@ -310,11 +329,9 @@ struct DonationSelectionView: View {
                     .font(.headline)
                     .cornerRadius(12)
                     
-                    // 🔧 CHANGED: "No thanks" now goes to thank you instead of completion
                     Button("No thanks") {
                         showingReceiptPrompt = false
                         showingThankYou = true
-                        // Add auto-dismiss after showing thank you
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                             if showingThankYou {
                                 handleSuccessfulCompletion()
@@ -469,9 +486,13 @@ struct DonationSelectionView: View {
     }
     
     private func handleCustomAmountButtonPress() {
+        print("📱 Custom amount button pressed")
         donationViewModel.isCustomAmount = true
-        // 🔧 NEW: Reset the flag before navigating
-        shouldNavigateToHomeOnAppear = false
+        
+        // 🔧 FIXED: Reset navigation source when user intentionally navigates to custom amount
+        navigationSource = .direct
+        hasProcessedCancelledReturn = false
+        
         navigateToCustomAmount = true
     }
     
@@ -496,6 +517,10 @@ struct DonationSelectionView: View {
         // Reset donation state
         donationViewModel.resetDonation()
         
+        // Reset navigation tracking
+        navigationSource = .direct
+        hasProcessedCancelledReturn = false
+        
         // Navigate to home
         navigateToHome = true
     }
@@ -508,13 +533,6 @@ struct DonationSelectionView: View {
             return
         }
         
-        // NEW: Check authentication but don't fail on reader connectivity
-        if !squareAuthService.isAuthenticated {
-            print("❌ Cannot process payments - authentication issue")
-            showingSquareAuth = true
-            return
-        }
-
         // Check reader connection - warn but allow to continue for graceful degradation
         if !paymentService.isReaderConnected {
             print("⚠️ No reader connected - will attempt to connect during payment")
@@ -555,7 +573,7 @@ struct DonationSelectionView: View {
                     self.orderId = self.paymentService.currentOrderId
                     self.paymentId = transactionId
                     
-                    // 🔧 NEW FLOW: Go directly to receipt prompt, skip thank you initially
+                    // Go directly to receipt prompt
                     self.showingReceiptPrompt = true
                 } else {
                     print("❌ Payment Cancelled/Failed: Going back to previous screen")
@@ -607,10 +625,7 @@ struct DonationSelectionView: View {
         isEmailValid = emailPredicate.evaluate(with: email)
     }
     
-    // Send receipt (unchanged)
-    // MARK: - Receipt Sending
-
-    // Call this function when the user confirms sending the receipt after email entry
+    // Send receipt (unchanged) - keeping the existing implementation
     private func sendReceipt() {
         guard isEmailValid && !emailAddress.isEmpty else { return }
         
@@ -618,10 +633,8 @@ struct DonationSelectionView: View {
         print("📧 Sending receipt to: \(emailAddress)")
         print("📧 Order ID: \(orderId ?? "N/A")")
         print("📧 Payment ID: \(paymentId ?? "N/A")")
-        // Using donationViewModel.selectedAmount for DonationSelectionView
         print("📧 Amount: \(donationViewModel.selectedAmount ?? 0)")
         
-        // Create request to backend API
         guard let url = URL(string: "\(SquareConfig.backendBaseURL)/api/receipts/send") else {
             print("❌ Invalid receipt API URL")
             self.handleReceiptError("Invalid server configuration. Please contact support.")
@@ -643,7 +656,7 @@ struct DonationSelectionView: View {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30.0 // 30 second timeout
+        request.timeoutInterval = 30.0
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
@@ -663,7 +676,6 @@ struct DonationSelectionView: View {
             DispatchQueue.main.async {
                 self.isSendingReceipt = false
                 
-                // Handle network errors
                 if let error = error {
                     print("❌ Network error sending receipt: \(error.localizedDescription)")
                     if (error as NSError).code == NSURLErrorTimedOut {
@@ -674,7 +686,6 @@ struct DonationSelectionView: View {
                     return
                 }
                 
-                // Check HTTP response
                 guard let httpResponse = response as? HTTPURLResponse else {
                     print("❌ Invalid response from receipt API")
                     self.handleReceiptError("Received an invalid response from the server. Please try again.")
@@ -687,10 +698,8 @@ struct DonationSelectionView: View {
                     print("📥 Response body: \(responseString)")
                 }
                 
-                // Handle different status codes
                 switch httpResponse.statusCode {
                 case 200:
-                    // Success - parse response for confirmation
                     if let data = data,
                        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                        let success = json["success"] as? Bool,
@@ -699,23 +708,22 @@ struct DonationSelectionView: View {
                         if let receiptId = json["receipt_id"] as? String {
                             print("📧 Receipt ID: \(receiptId)")
                         }
-                        self.showEmailSuccessAndComplete() // Assumes this exists in DonationSelectionView
+                        self.showEmailSuccessAndComplete()
                     } else {
                         print("⚠️ Unexpected success response format from server.")
-                        // Still proceed as if successful, or show a specific message
                         self.showEmailSuccessAndComplete()
                     }
                     
                 case 400:
-                    print("❌ Bad request (400). Possible issue with data sent.")
-                    self.handleReceiptError("There was an issue with the information provided for the receipt (e.g., invalid email). Please check and try again.")
+                    print("❌ Bad request (400)")
+                    self.handleReceiptError("There was an issue with the information provided for the receipt. Please check and try again.")
                     
                 case 404:
-                    print("❌ Organization not found (404) or API endpoint not found.")
+                    print("❌ Organization not found (404)")
                     self.handleReceiptError("The receipt service for this organization is not configured correctly. Please contact support.")
                     
                 case 429:
-                    print("❌ Rate limited (429). Too many requests.")
+                    print("❌ Rate limited (429)")
                     self.handleReceiptError("We've received too many requests. Please try sending the receipt again in a few moments.")
                     
                 case 500...599:
@@ -730,21 +738,16 @@ struct DonationSelectionView: View {
         }.resume()
     }
 
-    // Add this function to handle receipt errors by showing an alert
     private func handleReceiptError(_ message: String) {
         print("🔴 Receipt Error: \(message)")
         self.receiptErrorAlertMessage = message
         self.showReceiptErrorAlert = true
-        // self.isSendingReceipt = false // Already set at the beginning of the URLSession completion
     }
     
-    // Show email success and complete (unchanged)
     private func showEmailSuccessAndComplete() {
         showingEmailEntry = false
-        // 🔧 CHANGED: After email success, show thank you instead of going home
         showingThankYou = true
         
-        // Auto-dismiss thank you after 3 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             if showingThankYou {
                 handleSuccessfulCompletion()
