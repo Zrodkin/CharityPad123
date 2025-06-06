@@ -12,16 +12,9 @@ struct DonationSelectionView: View {
     @State private var navigateToCheckout = false
     @State private var navigateToHome = false
     
-    // 🔧 FIXED: Changed to track the source of navigation to prevent glitch
-    @State private var navigationSource: NavigationSource = .direct
-    @State private var hasProcessedCancelledReturn = false
     
-    enum NavigationSource {
-        case direct          // Direct navigation from HomeView
-        case cancelledReturn // Returning from cancelled custom amount
-    }
     
-    // Payment processing states
+    // Payment processing states.onAppear
     @State private var isProcessingPayment = false
     @State private var showingSquareAuth = false
     @State private var showingThankYou = false
@@ -112,25 +105,6 @@ struct DonationSelectionView: View {
             }
         }
         .onAppear {
-            print("📱 DonationSelectionView appeared with navigation source: \(navigationSource)")
-            
-            // 🔧 FIXED: Only handle cancelled return once, then reset the flag
-            if navigationSource == .cancelledReturn && !hasProcessedCancelledReturn {
-                print("🏠 Processing cancelled return - navigating to home")
-                hasProcessedCancelledReturn = true
-                navigationSource = .direct // Reset for future navigations
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    navigateToHome = true
-                }
-                return
-            }
-            
-            // 🔧 FIXED: Reset the flag if we're here from direct navigation
-            if navigationSource == .direct {
-                hasProcessedCancelledReturn = false
-            }
-            
             if squareAuthService.isAuthenticated {
                 kioskStore.connectCatalogService(catalogService)
                 kioskStore.loadPresetDonationsFromCatalog()
@@ -144,26 +118,10 @@ struct DonationSelectionView: View {
         }
         .navigationDestination(isPresented: $navigateToCustomAmount) {
             UpdatedCustomAmountView { amount in
-                handleCustomAmountSelection(amount: amount)
-            }
-            // 🔧 FIXED: Improved handling of custom amount view dismissal
-            .onDisappear {
-                print("📱 Custom amount view disappeared")
-                
-                // Check if this was a cancellation (no successful payment)
-                let wasCancelled = (donationViewModel.selectedAmount == nil || donationViewModel.selectedAmount == 0) && !donationViewModel.paymentSuccess
-                
-                if wasCancelled {
-                    print("🏠 Custom amount was cancelled - setting navigation source")
-                    navigationSource = .cancelledReturn
-                    hasProcessedCancelledReturn = false // Allow processing on next appear
-                } else {
-                    print("✅ Custom amount completed successfully")
-                    navigationSource = .direct
-                }
+                // This callback is no longer used since payments are processed directly
+                // in UpdatedCustomAmountView
             }
         }
-       
         .navigationDestination(isPresented: $navigateToHome) {
             HomeView()
                 .navigationBarBackButtonHidden(true)
@@ -178,14 +136,13 @@ struct DonationSelectionView: View {
         .sheet(isPresented: $showingSquareAuth) {
             SquareAuthorizationView()
         }
-        // Monitor payment processing
         .onReceive(paymentService.$isProcessingPayment) { processing in
             if !processing && isProcessingPayment {
                 print("🔄 Payment processing state changed to: \(processing)")
             }
         }
     }
-    
+
     // MARK: - Computed Properties (unchanged)
     
     private var backgroundImageView: some View {
@@ -218,6 +175,11 @@ struct DonationSelectionView: View {
                 .background(Color.white.opacity(0.3))
                 .cornerRadius(15)
         }
+    }
+    
+    private func handleCustomAmountButtonPress() {
+        donationViewModel.isCustomAmount = true
+        navigateToCustomAmount = true
     }
     
     // Payment processing overlay (unchanged)
@@ -485,16 +447,6 @@ struct DonationSelectionView: View {
         processPayment(amount: amount, isCustomAmount: false)
     }
     
-    private func handleCustomAmountButtonPress() {
-        print("📱 Custom amount button pressed")
-        donationViewModel.isCustomAmount = true
-        
-        // 🔧 FIXED: Reset navigation source when user intentionally navigates to custom amount
-        navigationSource = .direct
-        hasProcessedCancelledReturn = false
-        
-        navigateToCustomAmount = true
-    }
     
     private func handleCustomAmountSelection(amount: Double) {
         donationViewModel.selectedAmount = amount
@@ -516,10 +468,6 @@ struct DonationSelectionView: View {
         
         // Reset donation state
         donationViewModel.resetDonation()
-        
-        // Reset navigation tracking
-        navigationSource = .direct
-        hasProcessedCancelledReturn = false
         
         // Navigate to home
         navigateToHome = true
