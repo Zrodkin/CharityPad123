@@ -4,6 +4,7 @@ struct HomeView: View {
     @EnvironmentObject private var donationViewModel: DonationViewModel
     @EnvironmentObject private var kioskStore: KioskStore
     @State private var navigateToDonation = false
+    @State private var isNavigating = false
     @State private var isLongPressing = false
     @State private var longPressProgress: Double = 0.0
     @State private var longPressStartTime = Date()

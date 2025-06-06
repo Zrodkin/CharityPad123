@@ -132,10 +132,13 @@ struct DonationSelectionView: View {
             }
             // 🔧 NEW: Handle when custom amount view is dismissed (cancellation)
             .onDisappear {
-                // Check if payment was cancelled/failed and we should go to home
+                // Only set flag if payment was actually cancelled (not successful)
                 if donationViewModel.selectedAmount == nil || donationViewModel.selectedAmount == 0 {
-                    print("🏠 Custom amount cancelled - setting flag to navigate to home")
-                    shouldNavigateToHomeOnAppear = true
+                    // AND make sure we didn't just complete a successful payment
+                    if !donationViewModel.paymentSuccess {
+                        print("🏠 Custom amount cancelled - setting flag to navigate to home")
+                        shouldNavigateToHomeOnAppear = true
+                    }
                 }
             }
         }
@@ -241,21 +244,9 @@ struct DonationSelectionView: View {
                 Text("Your donation has been processed.")
                     .foregroundColor(.white)
                 
-                if let orderId = orderId {
-                    Text("Order: \(orderId)")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
-                if let paymentId = paymentId {
-                    Text("Payment: \(paymentId)")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
+                // 🔧 CHANGED: "Done" now goes directly to completion
                 Button("Done") {
-                    showingThankYou = false
-                    showingReceiptPrompt = true
+                    handleSuccessfulCompletion()
                 }
                 .padding(.horizontal, 40)
                 .padding(.vertical, 10)
@@ -266,11 +257,11 @@ struct DonationSelectionView: View {
             }
             .padding()
         }
+        // 🔧 CHANGED: Auto-dismiss after 3 seconds goes to completion, not receipt prompt
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 if showingThankYou {
-                    showingThankYou = false
-                    showingReceiptPrompt = true
+                    handleSuccessfulCompletion()
                 }
             }
         }
@@ -283,7 +274,6 @@ struct DonationSelectionView: View {
                 .edgesIgnoringSafeArea(.all)
             
             VStack(spacing: 30) {
-                // Receipt icon
                 ZStack {
                     Circle()
                         .fill(Color.blue.opacity(0.2))
@@ -309,7 +299,6 @@ struct DonationSelectionView: View {
                 }
                 
                 VStack(spacing: 16) {
-                    // Yes button
                     Button("Yes, send receipt") {
                         showingReceiptPrompt = false
                         showingEmailEntry = true
@@ -321,10 +310,16 @@ struct DonationSelectionView: View {
                     .font(.headline)
                     .cornerRadius(12)
                     
-                    // No button
+                    // 🔧 CHANGED: "No thanks" now goes to thank you instead of completion
                     Button("No thanks") {
                         showingReceiptPrompt = false
-                        handleSuccessfulCompletion()
+                        showingThankYou = true
+                        // Add auto-dismiss after showing thank you
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            if showingThankYou {
+                                handleSuccessfulCompletion()
+                            }
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -554,22 +549,17 @@ struct DonationSelectionView: View {
                 self.isProcessingPayment = false
                 
                 if success {
-                    print("✅ Payment successful! Transaction ID: \(transactionId ?? "N/A")")
-                    
+                    print("✅ Payment Success: Recording donation and showing receipt prompt")
                     // Record the donation
                     self.donationViewModel.recordDonation(amount: amount, transactionId: transactionId)
-                    
-                    // Store IDs for display
                     self.orderId = self.paymentService.currentOrderId
                     self.paymentId = transactionId
                     
-                    // Show success
-                    self.showingThankYou = true
+                    // 🔧 NEW FLOW: Go directly to receipt prompt, skip thank you initially
+                    self.showingReceiptPrompt = true
                 } else {
-                    print("🚫 Payment cancelled or failed by user")
-                    // Don't navigate away immediately - let user see they're back to selection screen
-                    // Reset state but stay on this screen
-                    self.resetPaymentState()
+                    print("❌ Payment Cancelled/Failed: Going back to previous screen")
+                    self.handleSilentFailureOrCancellation()
                 }
             }
         }
@@ -590,9 +580,12 @@ struct DonationSelectionView: View {
     }
     
     private func handleSuccessfulCompletion() {
-        print("✅ Payment completed successfully - returning to home")
         resetPaymentState()
-        handleNavigateToHome()
+        donationViewModel.resetDonation()  // Clear donation state
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.navigateToHome = true
+        }
     }
     
     private func resetPaymentState() {
@@ -748,8 +741,14 @@ struct DonationSelectionView: View {
     // Show email success and complete (unchanged)
     private func showEmailSuccessAndComplete() {
         showingEmailEntry = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.handleSuccessfulCompletion()
+        // 🔧 CHANGED: After email success, show thank you instead of going home
+        showingThankYou = true
+        
+        // Auto-dismiss thank you after 3 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            if showingThankYou {
+                handleSuccessfulCompletion()
+            }
         }
     }
     

@@ -258,21 +258,11 @@ struct UpdatedCustomAmountView: View {
                 Text("Your donation has been processed.")
                     .foregroundColor(.white)
                 
-                if let orderId = orderId {
-                    Text("Order: \(orderId)")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                }
+
                 
-                if let paymentId = paymentId {
-                    Text("Payment: \(paymentId)")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
+                // 🔧 CHANGED: "Done" now goes directly to completion
                 Button("Done") {
-                    showingThankYou = false
-                    showingReceiptPrompt = true
+                    handleSuccessfulCompletion()
                 }
                 .padding(.horizontal, 40)
                 .padding(.vertical, 10)
@@ -283,11 +273,11 @@ struct UpdatedCustomAmountView: View {
             }
             .padding()
         }
+        // 🔧 CHANGED: Auto-dismiss after 3 seconds goes to completion, not receipt prompt
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 if showingThankYou {
-                    showingThankYou = false
-                    showingReceiptPrompt = true
+                    handleSuccessfulCompletion()
                 }
             }
         }
@@ -335,9 +325,16 @@ struct UpdatedCustomAmountView: View {
                     .font(.headline)
                     .cornerRadius(12)
                     
+                    // 🔧 CHANGED: "No thanks" now goes to thank you instead of completion
                     Button("No thanks") {
                         showingReceiptPrompt = false
-                        handleSuccessfulCompletion()
+                        showingThankYou = true
+                        // Add auto-dismiss after showing thank you
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            if showingThankYou {
+                                handleSuccessfulCompletion()
+                            }
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -556,13 +553,9 @@ struct UpdatedCustomAmountView: View {
             processPayment(amount: amount, isCustomAmount: true)
         }
     
-    // 🔧 FIXED: Updated processPayment method to handle cancellations properly
-    private func processPayment(amount: Double, isCustomAmount: Bool) {
-        if !squareAuthService.isAuthenticated {
-            showingSquareAuth = true
-            return
-        }
-        
+   
+    // FIXED: Replace the success handling in processPayment method in UpdatedCustomAmountView.swift
+  private func processPayment(amount: Double, isCustomAmount: Bool) {
         if !squareAuthService.isAuthenticated {
             showingSquareAuth = true
             return
@@ -590,20 +583,16 @@ struct UpdatedCustomAmountView: View {
                 self.isProcessingPayment = false
                 
                 if success {
-                    print("✅ CustomAmount Success: Recording donation and showing thank you")
+                    print("✅ Payment Success: Recording donation and showing receipt prompt")
                     // Record the donation
                     self.donationViewModel.recordDonation(amount: amount, transactionId: transactionId)
                     self.orderId = self.paymentService.currentOrderId
                     self.paymentId = transactionId
                     
-                    // Show success briefly then go home
-                    self.showingThankYou = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        self.handleSuccessfulCompletion()
-                    }
+                    // 🔧 NEW FLOW: Go directly to receipt prompt, skip thank you initially
+                    self.showingReceiptPrompt = true
                 } else {
-                    print("❌ CustomAmount Cancelled/Failed: Going back to previous screen")
-                    // Payment was cancelled or failed - just go back
+                    print("❌ Payment Cancelled/Failed: Going back to previous screen")
                     self.handleSilentFailureOrCancellation()
                 }
             }
@@ -618,13 +607,17 @@ struct UpdatedCustomAmountView: View {
     private func handleSilentFailureOrCancellation() {
         paymentService.paymentError = nil
         resetPaymentState()
-        // Use dismiss to go back to DonationSelectionView, then that view will handle going to home
-        dismiss()
+        // Navigate directly to home instead of dismissing back to DonationSelectionView
+        navigateToHome = true
     }
     
     private func handleSuccessfulCompletion() {
         resetPaymentState()
-        navigateToHome = true
+        donationViewModel.resetDonation()  // Clear donation state
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.navigateToHome = true
+        }
     }
     
     private func resetPaymentState() {
@@ -790,8 +783,14 @@ struct UpdatedCustomAmountView: View {
     // Ensure this function exists and handles UI appropriately
     private func showEmailSuccessAndComplete() {
         showingEmailEntry = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.handleSuccessfulCompletion() // Navigates home or dismisses
+        // 🔧 CHANGED: After email success, show thank you instead of going home
+        showingThankYou = true
+        
+        // Auto-dismiss thank you after 3 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            if showingThankYou {
+                handleSuccessfulCompletion()
+            }
         }
     }
     private func shakeAmount() {
