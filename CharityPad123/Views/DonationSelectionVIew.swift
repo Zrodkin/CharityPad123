@@ -248,7 +248,7 @@ struct DonationSelectionView: View {
         }
     }
     
-    // Receipt prompt overlay (unchanged)
+    // Receipt prompt overlay - FIXED
     private var receiptPromptOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -280,18 +280,22 @@ struct DonationSelectionView: View {
                 }
                 
                 VStack(spacing: 16) {
-                    Button("Yes, send receipt") {
+                    // FIXED: "Yes, send receipt" button
+                    Button(action: {
                         showingReceiptPrompt = false
                         showingEmailEntry = true
+                    }) {
+                        Text("Yes, send receipt")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color.blue)
+                            .cornerRadius(12)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .font(.headline)
-                    .cornerRadius(12)
                     
-                    Button("No thanks") {
+                    // FIXED: "No thanks" button
+                    Button(action: {
                         showingReceiptPrompt = false
                         showingThankYou = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
@@ -299,16 +303,18 @@ struct DonationSelectionView: View {
                                 handleSuccessfulCompletion()
                             }
                         }
+                    }) {
+                        Text("No thanks")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                            )
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.clear)
-                    .foregroundColor(.white)
-                    .font(.headline)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                    )
                 }
                 .padding(.horizontal, 40)
             }
@@ -316,7 +322,7 @@ struct DonationSelectionView: View {
         }
     }
     
-    // Email entry overlay (unchanged)
+    // Email entry overlay - FIXED
     private var emailEntryOverlay: some View {
         ZStack {
             Color.black.opacity(0.8)
@@ -347,9 +353,9 @@ struct DonationSelectionView: View {
                         .padding(.horizontal, 20)
                 }
                 
-                // Email input field
+                // Email input field - FIXED: Removed placeholder text
                 VStack(spacing: 12) {
-                    TextField("your.email@example.com", text: $emailAddress)
+                    TextField("", text: $emailAddress)
                         .textFieldStyle(EmailTextFieldStyle())
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
@@ -369,6 +375,7 @@ struct DonationSelectionView: View {
                 .padding(.horizontal, 40)
                 
                 VStack(spacing: 16) {
+                    // FIXED: Send Receipt button
                     Button(action: sendReceipt) {
                         HStack {
                             if isSendingReceipt {
@@ -381,31 +388,33 @@ struct DonationSelectionView: View {
                                 Text("Send Receipt")
                             }
                         }
+                        .foregroundColor(.white)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(isEmailValid && !isSendingReceipt ? Color.green : Color.gray)
+                        .cornerRadius(12)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(isEmailValid && !isSendingReceipt ? Color.green : Color.gray)
-                    .foregroundColor(.white)
-                    .font(.headline)
-                    .cornerRadius(12)
                     .disabled(!isEmailValid || isSendingReceipt)
                     
-                    // Back button
-                    Button("Back") {
+                    // FIXED: Back button
+                    Button(action: {
                         showingEmailEntry = false
                         showingReceiptPrompt = true
                         emailAddress = ""
                         isEmailValid = false
+                    }) {
+                        Text("Back")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                            )
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.clear)
-                    .foregroundColor(.white)
-                    .font(.headline)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                    )
                     .disabled(isSendingReceipt)
                 }
                 .padding(.horizontal, 40)

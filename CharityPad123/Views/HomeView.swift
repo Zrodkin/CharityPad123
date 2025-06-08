@@ -180,7 +180,7 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
                 .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
-                .offset(y: -30) // <<---- ADD THIS LINE (adjust -20 as needed)
+                .offset(y: -10) // <<---- ADD THIS LINE (adjust -20 as needed)
 
                 Spacer()
                     .frame(height: KioskLayoutConstants.bottomSafeArea)
