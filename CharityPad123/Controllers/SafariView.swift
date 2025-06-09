@@ -29,23 +29,19 @@ struct SafariView: UIViewControllerRepresentable {
         
         // Add notification observer to handle OAuth callback and close this view
         coordinator.notificationObserver = NotificationCenter.default.addObserver(
-            forName: .squareOAuthCallback,
+            forName: .squareOAuthCallback,  // ← FIXED: Listen for OAuth callback
             object: nil,
             queue: .main
         ) { [weak coordinator] _ in
-            print("SafariView received OAuth callback notification")
+            print("SafariView received OAuth callback - auto-closing")
             
-            // Dismiss safari view controller when notification is received
-            if let safariVC = coordinator?.safariViewController,
-               safariVC.presentingViewController != nil {
+            if let safariVC = coordinator?.safariViewController {
                 safariVC.dismiss(animated: true) {
-                    // Call onDismiss after the safari view is dismissed
                     DispatchQueue.main.async {
                         coordinator?.parent.onDismiss()
                     }
                 }
             } else {
-                // If we can't access the safari view controller, still call onDismiss
                 DispatchQueue.main.async {
                     coordinator?.parent.onDismiss()
                 }

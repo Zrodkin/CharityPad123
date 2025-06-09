@@ -349,7 +349,7 @@ class SquareAuthService: ObservableObject {
                             
                             // Post notification that authentication was successful
                             NotificationCenter.default.post(
-                                name: .squareAuthenticationSuccessful,
+                                name: .squareOAuthCallback,
                                 object: nil,
                                 userInfo: [
                                     "accessToken": accessToken,
@@ -536,7 +536,7 @@ class SquareAuthService: ObservableObject {
                                 
                                 // Post notification that authentication was successful
                                 NotificationCenter.default.post(
-                                    name: .squareAuthenticationSuccessful,
+                                    name: .squareOAuthCallback,
                                     object: nil,
                                     userInfo: [
                                         "accessToken": accessToken,

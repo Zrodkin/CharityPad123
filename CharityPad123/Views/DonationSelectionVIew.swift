@@ -12,7 +12,7 @@ struct DonationSelectionView: View {
     @State private var navigateToCheckout = false
     @State private var navigateToHome = false
     
-    
+    @State private var timeoutTimer: Timer?
     
     // Payment processing states.onAppear
     @State private var isProcessingPayment = false
@@ -27,6 +27,7 @@ struct DonationSelectionView: View {
     @State private var paymentId: String? = nil
     @State private var receiptErrorAlertMessage: String? = nil
     @State private var showReceiptErrorAlert = false
+    
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dismiss) private var dismiss
@@ -95,6 +96,7 @@ struct DonationSelectionView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
+                    timeoutTimer?.invalidate()
                     dismiss()
                 }) {
                     Image(systemName: "chevron.left")
@@ -115,6 +117,7 @@ struct DonationSelectionView: View {
             if !paymentService.isReaderConnected {
                 paymentService.connectToReader()
             }
+            startTimeout()
         }
         .navigationDestination(isPresented: $navigateToCustomAmount) {
             UpdatedCustomAmountView { amount in
@@ -141,6 +144,13 @@ struct DonationSelectionView: View {
                 print("🔄 Payment processing state changed to: \(processing)")
             }
         }
+        .onDisappear {
+            timeoutTimer?.invalidate()
+        }
+        .onTapGesture {
+            resetTimeout()
+        }
+        .contentShape(Rectangle())
     }
 
     // MARK: - Computed Properties (unchanged)
@@ -178,6 +188,7 @@ struct DonationSelectionView: View {
     }
     
     private func handleCustomAmountButtonPress() {
+        resetTimeout()
         donationViewModel.isCustomAmount = true
         navigateToCustomAmount = true
     }
@@ -429,6 +440,7 @@ struct DonationSelectionView: View {
         let amount = Double(kioskStore.presetDonations[index].amount) ?? 0
         
         return Button(action: {
+            resetTimeout()
             // Process payment immediately instead of navigating to checkout
             handlePresetAmountSelection(amount: amount)
         }) {
@@ -484,6 +496,7 @@ struct DonationSelectionView: View {
     
     // Process payment method (unchanged)
     private func processPayment(amount: Double, isCustomAmount: Bool) {
+        timeoutTimer?.invalidate()
         // Check authentication
         if !squareAuthService.isAuthenticated {
             showingSquareAuth = true
@@ -712,6 +725,20 @@ struct DonationSelectionView: View {
         }
     }
     
+    // MARK: - Timeout Management
+
+    private func startTimeout() {
+        timeoutTimer?.invalidate()
+        let timeoutSeconds = Double(kioskStore.timeoutDuration) ?? 10.0
+        timeoutTimer = Timer.scheduledTimer(withTimeInterval: timeoutSeconds, repeats: false) { _ in
+            navigateToHome = true
+        }
+    }
+
+    private func resetTimeout() {
+        startTimeout()
+    }
+    
     private func updateDonationViewModel() {
         let amounts = kioskStore.presetDonations.compactMap { Double($0.amount) }
         if !amounts.isEmpty {
@@ -719,6 +746,8 @@ struct DonationSelectionView: View {
         }
     }
 }
+
+
 
 struct DonationSelectionView_Previews: PreviewProvider {
     static var previews: some View {

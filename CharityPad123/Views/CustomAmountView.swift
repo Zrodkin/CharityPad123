@@ -14,6 +14,8 @@ struct UpdatedCustomAmountView: View {
     @State private var navigateToHome = false
     @State private var selectedAmount: Double = 0
     
+    @State private var timeoutTimer: Timer?
+    
     // Payment processing states
     @State private var isProcessingPayment = false
     @State private var showingSquareAuth = false
@@ -186,6 +188,7 @@ struct UpdatedCustomAmountView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
+                    timeoutTimer?.invalidate()  // ADD this line
                     dismiss()
                 }) {
                     Image(systemName: "chevron.left")
@@ -199,6 +202,7 @@ struct UpdatedCustomAmountView: View {
             if !paymentService.isReaderConnected {
                 paymentService.connectToReader()
             }
+            startTimeout()
         }
         
         .navigationDestination(isPresented: $navigateToHome) {
@@ -208,6 +212,14 @@ struct UpdatedCustomAmountView: View {
         .sheet(isPresented: $showingSquareAuth) {
             SquareAuthorizationView()
         }
+        // ADD THESE MODIFIERS:
+        .onDisappear {
+            timeoutTimer?.invalidate()
+        }
+        .onTapGesture {
+            resetTimeout()
+        }
+        .contentShape(Rectangle())
         // 🔧 REMOVED: The problematic onReceive that was causing race conditions
         // This was interfering with the completion handler and causing cancelled payments
         // to incorrectly show the thank you screen
@@ -459,6 +471,7 @@ struct UpdatedCustomAmountView: View {
     // MARK: - Helper Methods
     
     private func handleNumberPress(_ num: String) {
+        resetTimeout()
         let maxDigits = 7
         
         if amountString.isEmpty && num == "0" {
@@ -497,6 +510,7 @@ struct UpdatedCustomAmountView: View {
     }
     
     private func handleDelete() {
+        resetTimeout()
         if !amountString.isEmpty {
             amountString.removeLast()
         }
@@ -512,6 +526,7 @@ struct UpdatedCustomAmountView: View {
     }
     
     private func handleDone() {
+        resetTimeout()
             guard !isProcessingPayment else {
                 return
             }
@@ -566,6 +581,7 @@ struct UpdatedCustomAmountView: View {
    
     // FIXED: Replace the success handling in processPayment method in UpdatedCustomAmountView.swift
   private func processPayment(amount: Double, isCustomAmount: Bool) {
+      timeoutTimer?.invalidate()
         if !squareAuthService.isAuthenticated {
             showingSquareAuth = true
             return
@@ -803,6 +819,8 @@ struct UpdatedCustomAmountView: View {
             }
         }
     }
+    
+    
     private func shakeAmount() {
             let shakeSequence: [CGFloat] = [0, -8, 8, -6, 6, -4, 4, -2, 2, 0]
             
@@ -812,6 +830,20 @@ struct UpdatedCustomAmountView: View {
                 }
             }
         }
+    
+    // MARK: - Timeout Management
+
+    private func startTimeout() {
+        timeoutTimer?.invalidate()
+        let timeoutSeconds = Double(kioskStore.timeoutDuration) ?? 10.0
+        timeoutTimer = Timer.scheduledTimer(withTimeInterval: timeoutSeconds, repeats: false) { _ in
+            navigateToHome = true
+        }
+    }
+
+    private func resetTimeout() {
+        startTimeout()
+    }
 }
 // MARK: - Supporting Components
 
