@@ -12,6 +12,7 @@ struct OnboardingView: View {
     @State private var isPolling = false
     @State private var pollingTimer: Timer? = nil
     @State private var notificationObserver: NSObjectProtocol? = nil
+    @State private var showingSupportView = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @EnvironmentObject private var organizationStore: OrganizationStore
     @EnvironmentObject private var squareAuthService: SquareAuthService
@@ -59,7 +60,7 @@ struct OnboardingView: View {
                 .padding(.bottom, 30)
                 
                 // Title and description
-                Text("Welcome to CharityPad")
+                Text("Welcome to ShulPad")
                     .font(.system(size: 32, weight: .bold))
                     .foregroundColor(.black)
                 
@@ -132,7 +133,7 @@ struct OnboardingView: View {
                     .padding(.horizontal)
                 }
                 
-                Text("By continuing, you agree to connect your Square account to CharityPad.\nWe'll use this to process payments and manage your donations.")
+                Text("By continuing, you agree to connect your Square account to ShulPad.\nWe'll use this to process payments and manage your donations.")
                     .font(.caption)
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
@@ -147,10 +148,7 @@ struct OnboardingView: View {
                         .foregroundColor(.black)
                     
                     Button("Contact support") {
-                        // Open support URL or email
-                        if let url = URL(string: "mailto:support@charitypad.com") {
-                            UIApplication.shared.open(url)
-                        }
+                        showingSupportView = true
                     }
                     .foregroundColor(.green)
                 }
@@ -165,6 +163,12 @@ struct OnboardingView: View {
             )
             .padding(.horizontal, 40)
             .padding(.vertical, 60)
+        }
+        .sheet(isPresented: $showingSupportView) {
+            SupportView()
+                .presentationDetents([.large])
+                .presentationCornerRadius(20)
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingSafari, onDismiss: {
             // Only handle dismiss manually if we haven't already received the OAuth callback
@@ -251,7 +255,7 @@ struct OnboardingView: View {
                 isLoading = false
             }
         } message: {
-            Text("CharityPad needs location access to connect to Square card readers. Please enable Location Services in Settings.")
+            Text("ShulPad needs location access to connect to Square card readers. Please enable Location Services in Settings.")
         }
     }
     
