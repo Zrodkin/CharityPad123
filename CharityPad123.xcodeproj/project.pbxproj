@@ -15,9 +15,22 @@
 		8D7FDAFD2DF2BF7E006824F7 /* CharityPad123.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CharityPad123.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		8D5DA2ED2DFAA15E00B1934B /* Exceptions for "CharityPad123" folder in "CharityPad123" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 8D8F84282DE654A1002D8A06 /* CharityPad123 */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8D8F842B2DE654A1002D8A06 /* CharityPad123 */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8D5DA2ED2DFAA15E00B1934B /* Exceptions for "CharityPad123" folder in "CharityPad123" target */,
+			);
 			path = CharityPad123;
 			sourceTree = "<group>";
 		};
