@@ -2,25 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- App Groups (if you need shared data between app extensions) -->
-    <!-- <key>com.apple.security.application-groups</key>
-    <array>
-        <string>group.org.rebbe.CharityPad123</string>
-    </array> -->
-    
-    <!-- Associated Domains (if you have universal links) -->
-    <!-- <key>com.apple.developer.associated-domains</key>
-    <array>
-        <string>applinks:charity-pad-server.vercel.app</string>
-    </array> -->
-    
-    <!-- NFC Tag Reading (if you use NFC for payments) -->
-    <key>com.apple.developer.nfc.readersession.formats</key>
-    <array>
-        <string>NDEF</string>
-        <string>TAG</string>
-    </array>
-    
     <!-- Background Modes (matches your Info.plist) -->
     <key>com.apple.developer.ubiquity-kvstore-identifier</key>
     <string>$(TeamIdentifierPrefix)org.rebbe.CharityPad123</string>

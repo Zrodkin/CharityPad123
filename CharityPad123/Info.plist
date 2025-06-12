@@ -12,6 +12,9 @@
     <string>CharityPad</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
+    <!-- FIXED: Add the required CFBundlePackageType -->
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
