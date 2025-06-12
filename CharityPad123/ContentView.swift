@@ -44,42 +44,41 @@ struct ContentView: View {
             refreshTrigger.toggle()
         }
         .onAppear {
-            // FIRST: Ensure state consistency on app start
-            ensureStateConsistency()
-            
-            // THEN: Check if we're authenticated with Square
-            squareAuthService.checkAuthentication()
-            
-            // Initialize the SDK if we're already authenticated
-            if squareAuthService.isAuthenticated {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    squarePaymentService.initializeSDK()
+            // Don't do state checks during logout
+            if !squareAuthService.isExplicitlyLoggingOut {
+                ensureStateConsistency()
+                squareAuthService.checkAuthentication()
+                
+                // Initialize the SDK if we're already authenticated
+                if squareAuthService.isAuthenticated {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        squarePaymentService.initializeSDK()
+                    }
                 }
             }
             
-            // NEW: Start health check monitoring
+            // Health check monitoring can run regardless
             squarePaymentService.startHealthCheckMonitoring()
             
-            // NEW: Perform health check after auth check completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                if squareAuthService.isAuthenticated {
+            if squareAuthService.isAuthenticated && !squareAuthService.isExplicitlyLoggingOut {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                     squarePaymentService.performHealthCheck()
                 }
             }
         }
         // Add listener for authentication state changes
         .onChange(of: squareAuthService.isAuthenticated) { _, isAuthenticated in
-            print("🚨 AUTH STATE CHANGED: \(isAuthenticated)")
+            // 🔧 FIX: Don't react to auth changes during explicit logout
+            if squareAuthService.isExplicitlyLoggingOut {
+                print("🚫 Ignoring auth state change during explicit logout")
+                return
+            }
             
             if isAuthenticated {
                 // Initialize the SDK when authentication state changes to authenticated
                 squarePaymentService.initializeSDK()
-            } else {
-                // NEW: If authentication is lost, force back to onboarding
-                print("🚨 Authentication lost - forcing return to onboarding")
-                hasCompletedOnboarding = false
-                isInAdminMode = false
             }
+            // Let the proper logout flow in AdminDashboardView handle logout instead
         }
         // NEW: Listen for forced logout notifications
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ForceReturnToOnboarding"))) { _ in
@@ -102,14 +101,6 @@ struct ContentView: View {
             return
         }
         
-        // NUCLEAR OPTION: If we're "onboarded" but not authenticated, reset everything
-        if hasCompletedOnboarding && !squareAuthService.isAuthenticated {
-            print("🚨 Onboarded but not authenticated - forcing complete reset")
-            hasCompletedOnboarding = false
-            isInAdminMode = false
-            squareAuthService.clearLocalAuthData()
-            return
-        }
         
         print("✅ App state consistency check passed")
     }
@@ -124,8 +115,6 @@ struct ContentView: View {
         // Reset donation state
         donationViewModel.resetDonation()
         
-        // Ensure admin mode is off when going to onboarding
-        isInAdminMode = false
         
         // Ensure in-memory state is clean for a fresh start
         print("App state reset for fresh onboarding")

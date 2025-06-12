@@ -6,9 +6,13 @@ class SquareAuthService: ObservableObject {
     @Published var isAuthenticating = false
     @Published var authError: String? = nil
     
+    @Published var isExplicitlyLoggingOut = false
+    private var logoutInProgress = false
+    
     // NEW: Add token validation status separate from reader connectivity
     @Published var tokenStatus: TokenValidationStatus = .unknown
     @Published var lastTokenCheck: Date? = nil
+    
     
     enum TokenValidationStatus {
         case unknown
@@ -158,23 +162,39 @@ class SquareAuthService: ObservableObject {
     }
     
     init() {
-        // Check if we have a valid token
-        checkAuthentication()
+        // Only check authentication if we're not in the middle of logout
+        if !isExplicitlyLoggingOut && !logoutInProgress {
+            checkAuthentication()
+        }
     }
     
     // MARK: - Authentication Methods
     
     func checkAuthentication() {
-        // First check if we can use locally stored tokens
-        if let _ = accessToken,
-           let expirationDate = tokenExpirationDate,
-           expirationDate > Date() {
-            print("Found valid local token, checking with server...")
-        } else {
-            print("No valid local token found")
+        // 🔧 CRITICAL FIX: Don't check auth during explicit logout
+        if isExplicitlyLoggingOut || logoutInProgress {
+            print("🚫 Skipping auth check - logout in progress")
+            return
         }
         
-        // Always verify with the server, regardless of local token presence
+        // 🔧 KEY FIX: If we have no local tokens, don't bother checking server
+        guard let _ = accessToken,
+              let expirationDate = tokenExpirationDate else {
+            print("No local tokens found - setting isAuthenticated = false")
+            isAuthenticated = false
+            return
+        }
+        
+        // Check if token is expired locally first
+        if expirationDate <= Date() {
+            print("Local token is expired - setting isAuthenticated = false")
+            isAuthenticated = false
+            return
+        }
+        
+        print("Found valid local token, checking with server...")
+        
+        // Only check server if we have valid local tokens
         guard let url = URL(string: "\(SquareConfig.backendBaseURL)\(SquareConfig.statusEndpoint)?organization_id=\(organizationId)&device_id=\(deviceId)") else {
             print("Invalid status URL")
             isAuthenticated = false
@@ -186,6 +206,12 @@ class SquareAuthService: ObservableObject {
         URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                
+                // 🔧 ADDITIONAL FIX: Double-check logout state before processing response
+                if self.isExplicitlyLoggingOut || self.logoutInProgress {
+                    print("🚫 Logout started during network request - ignoring response")
+                    return
+                }
                 
                 if let error = error {
                     print("Error checking authentication: \(error)")
@@ -225,6 +251,17 @@ class SquareAuthService: ObservableObject {
                                 if let locationId = json["location_id"] as? String {
                                     self.locationId = locationId
                                     print("Updated location ID: \(locationId)")
+                                }
+                                
+                                // 🔧 FIX: Only update tokens if server provides them
+                                if let accessToken = json["access_token"] as? String {
+                                    self.accessToken = accessToken
+                                    print("Updated access token from server")
+                                }
+                                
+                                if let refreshToken = json["refresh_token"] as? String {
+                                    self.refreshToken = refreshToken
+                                    print("Updated refresh token from server")
                                 }
                                 
                                 // If expires_at is available, update that too
@@ -812,6 +849,10 @@ class SquareAuthService: ObservableObject {
     func clearLocalAuthData() {
         print("Clearing all local authentication data")
         
+        // 🔧 CRITICAL FIX: Set explicit logout flags FIRST
+        isExplicitlyLoggingOut = true
+        logoutInProgress = true
+        
         // Clear all token-related values
         accessToken = nil
         refreshToken = nil
@@ -820,7 +861,6 @@ class SquareAuthService: ObservableObject {
         tokenExpirationDate = nil
         pendingAuthState = nil
         
-        // ADD THIS LINE HERE:
         UserDefaults.standard.removeObject(forKey: organizationIdKey)
         
         // Reset state
@@ -828,7 +868,7 @@ class SquareAuthService: ObservableObject {
         isAuthenticating = false
         authError = nil
         
-        // NEW: Clear catalog state when auth changes
+        // Clear catalog state
         NotificationCenter.default.post(
             name: Notification.Name("ClearCatalogState"),
             object: nil
@@ -840,6 +880,11 @@ class SquareAuthService: ObservableObject {
         print("All local authentication data cleared")
     }
     
+    func resetLogoutFlags() {
+        print("🔄 Resetting logout flags")
+        isExplicitlyLoggingOut = false
+        logoutInProgress = false
+    }
     
     
     // MARK: - Helper Methods
