@@ -28,6 +28,27 @@ class SquareAuthService: ObservableObject {
     private let pendingAuthStateKey = "squarePendingAuthState"
     private let organizationIdKey = "organizationId"
     
+    // MARK: - Device ID Support
+       private let deviceIdKey = "squareDeviceId"
+       
+       /// Unique device identifier for multi-device support
+    private var deviceId: String {
+        // Check if we already have a stored device ID
+        if let stored = UserDefaults.standard.string(forKey: deviceIdKey) {
+            return stored
+        }
+        
+        // Generate shorter device ID to avoid overly long organization IDs
+        let fullDeviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        let shortDeviceId = String(fullDeviceId.prefix(8)) // Use only first 8 characters
+        
+        // Store it for future use
+        UserDefaults.standard.set(shortDeviceId, forKey: deviceIdKey)
+        print("🆔 Generated new short device ID: \(shortDeviceId)")
+        
+        return shortDeviceId
+    }
+    
     var accessToken: String? {
         get { UserDefaults.standard.string(forKey: accessTokenKey) }
         set { UserDefaults.standard.set(newValue, forKey: accessTokenKey) }
@@ -62,9 +83,28 @@ class SquareAuthService: ObservableObject {
     }
     
     var organizationId: String {
-        get { UserDefaults.standard.string(forKey: organizationIdKey) ?? SquareConfig.organizationId }
-        set { UserDefaults.standard.set(newValue, forKey: organizationIdKey) }
+        get {
+            let baseOrgId = UserDefaults.standard.string(forKey: organizationIdKey) ?? SquareConfig.organizationId
+            
+            // SAFE APPROACH: Only add device suffix if we detect multi-device usage
+            // This prevents breaking existing single-device setups
+            if shouldUseDeviceSpecificId() {
+                return "\(baseOrgId)_\(deviceId)"
+            } else {
+                return baseOrgId
+            }
+        }
+        set {
+            // Store only the base organization ID (without device suffix)
+            let baseOrgId = newValue.components(separatedBy: "_").first ?? newValue
+            UserDefaults.standard.set(baseOrgId, forKey: organizationIdKey)
+        }
     }
+       
+       /// Get the base organization ID without device suffix
+       var baseOrganizationId: String {
+           return UserDefaults.standard.string(forKey: organizationIdKey) ?? SquareConfig.organizationId
+       }
 
     // NEW: Add reference to payment service for health checks
     private weak var paymentService: SquarePaymentService?
@@ -135,7 +175,7 @@ class SquareAuthService: ObservableObject {
         }
         
         // Always verify with the server, regardless of local token presence
-        guard let url = URL(string: "\(SquareConfig.backendBaseURL)\(SquareConfig.statusEndpoint)?organization_id=\(organizationId)") else {
+        guard let url = URL(string: "\(SquareConfig.backendBaseURL)\(SquareConfig.statusEndpoint)?organization_id=\(organizationId)&device_id=\(deviceId)") else {
             print("Invalid status URL")
             isAuthenticated = false
             return
@@ -273,7 +313,7 @@ class SquareAuthService: ObservableObject {
         }
         
         // Check with our backend if the authorization has been completed
-        guard let backendURL = URL(string: "\(SquareConfig.backendBaseURL)\(SquareConfig.statusEndpoint)?state=\(state)") else {
+        guard let backendURL = URL(string: "\(SquareConfig.backendBaseURL)\(SquareConfig.statusEndpoint)?state=\(state)&device_id=\(deviceId)") else {
             authError = "Invalid backend URL"
             isAuthenticating = false
             completion(false)
@@ -470,7 +510,7 @@ class SquareAuthService: ObservableObject {
             print("Polling for authentication status with state: \(state)")
             
             // Use the state parameter to check authentication status
-            let urlString = "\(SquareConfig.backendBaseURL)\(SquareConfig.statusEndpoint)?state=\(state)"
+            let urlString = "\(SquareConfig.backendBaseURL)\(SquareConfig.statusEndpoint)?state=\(state)&device_id=\(deviceId)"
             guard let url = URL(string: urlString) else {
                 self.authError = "Invalid status URL"
                 self.isAuthenticating = false
@@ -620,6 +660,21 @@ class SquareAuthService: ObservableObject {
         checkAuthentication()
     }
     
+    private func shouldUseDeviceSpecificId() -> Bool {
+        // Check if we've explicitly enabled multi-device mode
+        if UserDefaults.standard.bool(forKey: "enableMultiDeviceMode") {
+            return true
+        }
+        
+        // Check if we've detected conflicts (you can set this flag when login conflicts occur)
+        if UserDefaults.standard.bool(forKey: "hasDeviceConflicts") {
+            return true
+        }
+        
+        // Default: use simple organization ID for backward compatibility
+        return false
+    }
+    
     // MARK: - Token Management
     
     func refreshAccessToken() {
@@ -633,7 +688,8 @@ class SquareAuthService: ObservableObject {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let body: [String: Any] = [
-            "organization_id": organizationId
+            "organization_id": organizationId,
+            "device_id": deviceId
         ]
         
         do {
@@ -714,7 +770,10 @@ class SquareAuthService: ObservableObject {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let body: [String: Any] = ["organization_id": organizationId] // Ensure organizationId is correctly sourced
+        let body: [String: Any] = [
+            "organization_id": organizationId,
+            "device_id": deviceId
+        ]
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -815,7 +874,8 @@ class SquareAuthService: ObservableObject {
         
         let body: [String: Any] = [
             "refresh_token": refreshToken,
-            "organization_id": organizationId
+            "organization_id": organizationId,
+            "device_id": deviceId
         ]
         
         do {
@@ -874,6 +934,48 @@ class SquareAuthService: ObservableObject {
                 }
             }
         }.resume()
+    }
+    // MARK: - Device Management
+        
+        /// Get the current device ID
+        func getCurrentDeviceId() -> String {
+            return deviceId
+        }
+        
+        /// Reset device ID (for testing or device transfer)
+        func resetDeviceId() {
+            UserDefaults.standard.removeObject(forKey: deviceIdKey)
+            print("🔄 Device ID reset - will generate new one on next access")
+        }
+        
+        /// Check if another device is using the same base organization
+        func checkForOtherDevices(completion: @escaping ([String]) -> Void) {
+            // This would query your backend for other device IDs using the same base org
+            // Implementation depends on your backend API
+            completion([]) // Placeholder
+        }
+    func enableMultiDeviceMode() {
+        UserDefaults.standard.set(true, forKey: "enableMultiDeviceMode")
+        print("🔄 Multi-device mode enabled - will use device-specific organization IDs")
+        
+        // Clear authentication to force re-auth with new ID format
+        clearLocalAuthData()
+    }
+
+    // FIX 4: Add conflict detection (call this when you detect login conflicts)
+    func handleDeviceConflict() {
+        print("⚠️ Device conflict detected - enabling device-specific IDs")
+        UserDefaults.standard.set(true, forKey: "hasDeviceConflicts")
+        enableMultiDeviceMode()
+    }
+    func debugCurrentIdStrategy() {
+        print("🔍 Current ID Strategy Debug:")
+        print("  - Base Organization ID: \(baseOrganizationId)")
+        print("  - Device ID: \(deviceId)")
+        print("  - Should Use Device-Specific: \(shouldUseDeviceSpecificId())")
+        print("  - Final Organization ID: \(organizationId)")
+        print("  - Multi-Device Mode: \(UserDefaults.standard.bool(forKey: "enableMultiDeviceMode"))")
+        print("  - Has Conflicts: \(UserDefaults.standard.bool(forKey: "hasDeviceConflicts"))")
     }
 }
 

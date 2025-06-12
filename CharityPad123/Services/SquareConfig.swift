@@ -1,4 +1,5 @@
 import Foundation
+import UIKit  // ← ADD THIS IMPORT
 
 struct SquareConfig {
   // Square application credentials
@@ -28,7 +29,7 @@ struct SquareConfig {
   
   // OAuth scopes needed for complete donation system functionality
   static let scopes = [
-      "MERCHANT_PROFILE_READ",  
+      "MERCHANT_PROFILE_READ",
       "PAYMENTS_WRITE",
       "PAYMENTS_WRITE_IN_PERSON",
       "PAYMENTS_READ",
@@ -39,7 +40,10 @@ struct SquareConfig {
   
   // Generate the OAuth URL for authorization - using backend approach
   static func generateOAuthURL(completion: @escaping (URL?, Error?, String?) -> Void) {
-      guard let url = URL(string: "\(backendBaseURL)\(authorizeEndpoint)?organization_id=\(organizationId)") else {
+      // ✅ FIX: Get device ID and add it to the request
+      let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? "unknown-device"
+      
+      guard let url = URL(string: "\(backendBaseURL)\(authorizeEndpoint)?organization_id=\(organizationId)&device_id=\(deviceId)") else {
           completion(nil, NSError(domain: "com.charitypad", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid backend URL"]), nil)
           return
       }
