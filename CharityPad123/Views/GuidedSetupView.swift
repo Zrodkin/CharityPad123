@@ -84,7 +84,7 @@ struct GuidedSetupView: View {
     // MARK: - Progress Indicator
     
     private var progressIndicator: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 8) {
             // Step dots
             HStack(spacing: 12) {
                 ForEach(0..<totalSteps, id: \.self) { step in
@@ -563,59 +563,25 @@ struct QuickSetupCard: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(LinearGradient(
-                            colors: [Color.green.opacity(0.8), Color.blue.opacity(0.6)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(width: 48, height: 48)
-                    
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(.white)
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Quick Setup")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                    
-                    Text("Get started in 3 simple steps")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-            }
-            
-            // Setup steps preview
-            VStack(spacing: 8) {
-                QuickSetupStepRow(icon: "photo.fill", title: "Choose background image", color: .blue)
-                QuickSetupStepRow(icon: "building.2.fill", title: "Enter organization name", color: .green)
-                QuickSetupStepRow(icon: "doc.text.fill", title: "Add tax ID for receipts", color: .purple)
-            }
-            
-            Button("Start Quick Setup") {
+            Button(action: {
                 showingGuidedSetup = true
+            }) {
+                Text("Start Quick Setup")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.green, Color.blue],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            .font(.subheadline)
-            .fontWeight(.semibold)
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(
-                LinearGradient(
-                    colors: [Color.green, Color.blue],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .contentShape(RoundedRectangle(cornerRadius: 10))
+            .buttonStyle(PlainButtonStyle())
         }
         .padding(20)
         .background(Color(.secondarySystemBackground))
@@ -646,9 +612,8 @@ struct QuickSetupStepRow: View {
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            
-            Spacer()
         }
+        .frame(maxWidth: .infinity)
     }
 }
 

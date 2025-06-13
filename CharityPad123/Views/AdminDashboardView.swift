@@ -261,7 +261,6 @@ struct AdminDashboardView: View {
             }
             .background(Color(.systemGroupedBackground))
         }
-        
         // 🔧 FIX 4: Improved alert with proper state management
         .alert("Logout", isPresented: $showLogoutAlert) {
             Button("Cancel", role: .cancel) {
@@ -501,11 +500,13 @@ struct LogoutOverlay: View {
 }
 
 struct QuickSetupDetailView: View {
+    @State private var showingGuidedSetup = false
+    
     var body: some View {
         VStack {
             Spacer()
             
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 64))
                     .foregroundColor(.blue.opacity(0.6))
@@ -523,8 +524,26 @@ struct QuickSetupDetailView: View {
                         .frame(maxWidth: 400)
                 }
                 
-                QuickSetupCard()
-                    .frame(maxWidth: 400)
+                Button(action: {
+                    showingGuidedSetup = true
+                }) {
+                    Text("Start Quick Setup")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.green, Color.blue],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .frame(maxWidth: 300)
             }
             
             Spacer()
@@ -532,6 +551,9 @@ struct QuickSetupDetailView: View {
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemGroupedBackground))
+        .sheet(isPresented: $showingGuidedSetup) {
+            GuidedSetupView()
+        }
     }
 }
 
