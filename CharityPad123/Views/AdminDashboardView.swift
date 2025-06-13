@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminDashboardView: View {
-    @State private var selectedTab: String? = "home"
+    @State private var selectedTab: String? = nil
     @State private var showLogoutAlert = false
     @State private var isLoggingOut = false
     
@@ -255,11 +255,13 @@ struct AdminDashboardView: View {
                         EmptyDetailView()
                     }
                 } else {
-                    EmptyDetailView()
+                    // Show Quick Setup card when no tab is selected
+                    QuickSetupDetailView()
                 }
             }
             .background(Color(.systemGroupedBackground))
         }
+        
         // 🔧 FIX 4: Improved alert with proper state management
         .alert("Logout", isPresented: $showLogoutAlert) {
             Button("Cancel", role: .cancel) {
@@ -301,6 +303,11 @@ struct AdminDashboardView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .squareAuthenticationStatusChanged)) { _ in
             // Handle authentication status changes
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LaunchKioskFromQuickSetup"))) { _ in
+            print("🚀 Launching kiosk from quick setup")
+            kioskStore.updateDonationViewModel(donationViewModel)
+            isInAdminMode = false
         }
     }
     
@@ -490,6 +497,41 @@ struct LogoutOverlay: View {
         }
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.3), value: true)
+    }
+}
+
+struct QuickSetupDetailView: View {
+    var body: some View {
+        VStack {
+            Spacer()
+            
+            VStack(spacing: 24) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 64))
+                    .foregroundColor(.blue.opacity(0.6))
+                
+                VStack(spacing: 12) {
+                    Text("Welcome to Your Admin Dashboard")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("Get started quickly with our guided setup, or choose a specific setting from the sidebar to customize your donation kiosk.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 400)
+                }
+                
+                QuickSetupCard()
+                    .frame(maxWidth: 400)
+            }
+            
+            Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground))
     }
 }
 

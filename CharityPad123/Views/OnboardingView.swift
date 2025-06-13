@@ -278,6 +278,8 @@ struct OnboardingView: View {
         // Complete onboarding
         hasCompletedOnboarding = true
         
+        UserDefaults.standard.set(true, forKey: "isInAdminMode")
+        
         print("✅ Onboarding completed - hasCompletedOnboarding set to true")
         
         // 🔧 POST NOTIFICATION: Ensure all observers know onboarding is complete

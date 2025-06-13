@@ -5,8 +5,11 @@ struct EmailReceiptsView: View {
     @State private var organizationName: String = ""
     @State private var taxId: String = ""
     @State private var receiptMessage: String = ""
-    @State private var isSaving = false
     @State private var showToast = false
+    @State private var toastMessage = "Settings saved"
+    
+    // Auto-save timer
+    @State private var autoSaveTimer: Timer?
     
     var body: some View {
         ScrollView {
@@ -52,6 +55,9 @@ struct EmailReceiptsView: View {
                                 
                                 TextField("Enter organization name", text: $organizationName)
                                     .textFieldStyle(ModernTextFieldStyle())
+                                    .onChange(of: organizationName) { _, _ in
+                                        scheduleAutoSave()
+                                    }
                             }
                             
                             // Tax ID Field
@@ -64,8 +70,12 @@ struct EmailReceiptsView: View {
                                 TextField("", text: $taxId)
                                     .textFieldStyle(ModernTextFieldStyle())
                                     .keyboardType(.numbersAndPunctuation)
+                                    .onChange(of: taxId) { _, _ in
+                                        scheduleAutoSave()
+                                    }
                             }
-                            // Custom Receipt Message Field 🆕 ADD THIS ENTIRE SECTION
+                            
+                            // Custom Receipt Message Field
                             VStack(alignment: .leading, spacing: 8) {
                                 SectionHeader(
                                     title: "Receipt Message",
@@ -80,6 +90,9 @@ struct EmailReceiptsView: View {
                                     TextEditor(text: $receiptMessage)
                                         .padding(12)
                                         .background(Color.clear)
+                                        .onChange(of: receiptMessage) { _, _ in
+                                            scheduleAutoSave()
+                                        }
                                     
                                     if receiptMessage.isEmpty {
                                         Text("Enter your custom thank you message...")
@@ -97,7 +110,7 @@ struct EmailReceiptsView: View {
                     ReceiptPreviewCard(
                         organizationName: organizationName.isEmpty ? "Your Organization" : organizationName,
                         taxId: taxId.isEmpty ? "12-3456789" : taxId,
-                        receiptMessage: receiptMessage.isEmpty ? "Thank you for your generous donation!" : receiptMessage // 🆕 ADD THIS LINE
+                        receiptMessage: receiptMessage.isEmpty ? "Thank you for your generous donation!" : receiptMessage
                     )
                     
                     // Receipt Information Card
@@ -134,32 +147,6 @@ struct EmailReceiptsView: View {
                     }
                 }
                 .padding(.horizontal, 24)
-                
-                // Save button
-                Button(action: saveSettings) {
-                    HStack {
-                        if isSaving {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(0.9)
-                            
-                            Text("Saving...")
-                        } else {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 16, weight: .semibold))
-                            
-                            Text("Save Changes")
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
-                }
-                .disabled(isSaving)
-                .padding(.horizontal, 24)
                 .padding(.bottom, 24)
             }
         }
@@ -167,34 +154,31 @@ struct EmailReceiptsView: View {
         .onAppear {
             organizationName = organizationStore.name
             taxId = organizationStore.taxId
-            receiptMessage = organizationStore.receiptMessage // 🆕 ADD THIS LINE
+            receiptMessage = organizationStore.receiptMessage
         }
-        .overlay(alignment: .top) {
-            if showToast {
-                ToastNotification(message: "Settings saved successfully")
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showToast)
-                    .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            showToast = false
-                        }
-                    }
-            }
+      
+    }
+    
+    // MARK: - Auto-Save Functions
+    
+    private func scheduleAutoSave() {
+        // Cancel existing timer
+        autoSaveTimer?.invalidate()
+        
+        // Schedule new timer with 1 second delay
+        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+            autoSaveSettings()
         }
     }
     
-    func saveSettings() {
-        isSaving = true
-        
+    private func autoSaveSettings() {
         organizationStore.name = organizationName
         organizationStore.taxId = taxId
-        organizationStore.receiptMessage = receiptMessage // 🆕 ADD THIS LINE
+        organizationStore.receiptMessage = receiptMessage
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            organizationStore.saveToUserDefaults()
-            isSaving = false
-            showToast = true
-        }
+        organizationStore.saveToUserDefaults()
+        
+       
     }
 }
 
@@ -203,7 +187,7 @@ struct EmailReceiptsView: View {
 struct ReceiptPreviewCard: View {
     let organizationName: String
     let taxId: String
-    let receiptMessage: String // 🆕 ADD THIS LINE
+    let receiptMessage: String
     
     var body: some View {
         SettingsCard(title: "Receipt Preview", icon: "doc.richtext.fill") {
@@ -245,7 +229,7 @@ struct ReceiptPreviewCard: View {
                     
                     // Footer
                     VStack(spacing: 6) {
-                        Text(receiptMessage.isEmpty ? "Thank you for your generous donation!" : receiptMessage) // 🆕 CHANGE THIS LINE
+                        Text(receiptMessage.isEmpty ? "Thank you for your generous donation!" : receiptMessage)
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundStyle(.primary)
@@ -253,7 +237,8 @@ struct ReceiptPreviewCard: View {
                         Text("This receipt is for your tax records.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }                }
+                    }
+                }
                 .padding(20)
                 .background(
                     RoundedRectangle(cornerRadius: 12)

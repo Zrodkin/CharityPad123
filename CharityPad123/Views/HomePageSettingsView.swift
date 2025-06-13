@@ -8,9 +8,11 @@ struct HomePageSettingsView: View {
     @State private var homePageEnabled = true
     @State private var showingLogoImagePicker = false
     @State private var showingBackgroundImagePicker = false
-    @State private var isDirty = false
-    @State private var isSaving = false
     @State private var showToast = false
+    @State private var toastMessage = "Settings saved"
+    
+    // Auto-save timer
+    @State private var autoSaveTimer: Timer?
     
     var body: some View {
         ScrollView {
@@ -31,8 +33,8 @@ struct HomePageSettingsView: View {
                         // Enable/disable toggle
                         Toggle("Enabled", isOn: $homePageEnabled)
                             .toggleStyle(SwitchToggleStyle(tint: .blue))
-                            .onChange(of: homePageEnabled) { _, _ in
-                                isDirty = true
+                            .onChange(of: homePageEnabled) { _, newValue in
+                                scheduleAutoSave()
                             }
                     }
                     
@@ -91,8 +93,7 @@ struct HomePageSettingsView: View {
                                         if kioskStore.logoImage != nil {
                                             Button("Remove") {
                                                 kioskStore.logoImage = nil
-                                                isDirty = true
-                                                kioskStore.saveSettings()
+                                                autoSaveSettings()
                                             }
                                             .buttonStyle(DestructiveButtonStyle())
                                         }
@@ -169,7 +170,7 @@ struct HomePageSettingsView: View {
                                         if kioskStore.backgroundImage != nil {
                                             Button("Remove") {
                                                 kioskStore.backgroundImage = nil
-                                                isDirty = true
+                                                autoSaveSettings()
                                             }
                                             .buttonStyle(DestructiveButtonStyle())
                                         }
@@ -196,7 +197,7 @@ struct HomePageSettingsView: View {
                                 TextField("Enter headline", text: $headline)
                                     .textFieldStyle(ModernTextFieldStyle())
                                     .onChange(of: headline) { _, _ in
-                                        isDirty = true
+                                        scheduleAutoSave()
                                     }
                             }
                             
@@ -213,7 +214,7 @@ struct HomePageSettingsView: View {
                                         .padding(12)
                                         .background(Color.clear)
                                         .onChange(of: subtext) { _, _ in
-                                            isDirty = true
+                                            scheduleAutoSave()
                                         }
                                     
                                     if subtext.isEmpty {
@@ -260,35 +261,7 @@ struct HomePageSettingsView: View {
                     }
                 }
                 .padding(.horizontal, 24)
-                
-                // Save button
-                if isDirty {
-                    Button(action: saveSettings) {
-                        HStack {
-                            if isSaving {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.9)
-                                
-                                Text("Saving...")
-                            } else {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 16, weight: .semibold))
-                                
-                                Text("Save Changes")
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
-                    }
-                    .disabled(isSaving)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
-                }
+                .padding(.bottom, 24)
             }
         }
         .background(Color(.systemGroupedBackground))
@@ -301,7 +274,7 @@ struct HomePageSettingsView: View {
             ImagePicker(selectedImage: $kioskStore.logoImage, isPresented: $showingLogoImagePicker)
                 .onDisappear {
                     if kioskStore.logoImage != nil {
-                        isDirty = true
+                        autoSaveSettings()
                     }
                 }
         }
@@ -309,41 +282,37 @@ struct HomePageSettingsView: View {
             ImagePicker(selectedImage: $kioskStore.backgroundImage, isPresented: $showingBackgroundImagePicker)
                 .onDisappear {
                     if kioskStore.backgroundImage != nil {
-                        isDirty = true
+                        autoSaveSettings()
                     }
                 }
         }
-        .overlay(alignment: .top) {
-            if showToast {
-                ToastNotification(message: "Settings saved successfully")
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showToast)
-                    .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            showToast = false
-                        }
-                    }
-            }
+       
+    }
+    
+    // MARK: - Auto-Save Functions
+    
+    private func scheduleAutoSave() {
+        // Cancel existing timer
+        autoSaveTimer?.invalidate()
+        
+        // Schedule new timer with 1 second delay
+        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+            autoSaveSettings()
         }
     }
     
-    func saveSettings() {
-        isSaving = true
-        
+    private func autoSaveSettings() {
         kioskStore.headline = headline
         kioskStore.subtext = subtext
         kioskStore.homePageEnabled = homePageEnabled
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            kioskStore.saveSettings()
-            isSaving = false
-            isDirty = false
-            showToast = true
-        }
+        kioskStore.saveSettings()
+        
+        
     }
 }
 
-// MARK: - Supporting Views
+// MARK: - Supporting Views (unchanged)
 
 struct SettingsCard<Content: View>: View {
     let title: String
@@ -412,20 +381,7 @@ struct ModernTextFieldStyle: TextFieldStyle {
     }
 }
 
-struct SecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline)
-            .fontWeight(.medium)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color(.secondarySystemBackground))
-            .foregroundStyle(.primary)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
-    }
-}
+
 
 struct DestructiveButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

@@ -2,153 +2,133 @@ import SwiftUI
 
 struct TimeoutSettingsView: View {
     @EnvironmentObject private var kioskStore: KioskStore
-    @State private var timeoutDuration: String = "60"
-    @State private var isSaving = false
-    @State private var showToast = false
+    @State private var timeoutDuration: String = "15"
+    
+    // Auto-save timer
+    @State private var autoSaveTimer: Timer?
     
     let timeoutOptions = [
+        ("10", "10 seconds"),
         ("15", "15 seconds"),
+        ("25", "25 seconds"),
         ("30", "30 seconds"),
-        ("60", "1 minute"),
-        ("120", "2 minutes"),
-        ("300", "5 minutes")
+        ("45", "45 seconds")
     ]
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Scrollable content
-            ScrollView {
-                LazyVStack(spacing: 24) {
-                    // Page header
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "clock.fill")
-                                .font(.title2)
-                                .foregroundStyle(.blue)
-                            
-                            Text("Timeout Settings")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                            
-                            Spacer()
-                        }
+        ScrollView {
+            LazyVStack(spacing: 24) {
+                // Page header
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "clock.fill")
+                            .font(.title2)
+                            .foregroundStyle(.blue)
                         
-                        Text("Configure how long the kiosk waits before automatically resetting to the home screen")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        Text("Timeout Settings")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        
+                        Spacer()
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 24)
                     
-                    // Main content - just the timeout duration card
-                    VStack(spacing: 20) {
-                        SettingsCard(title: "Auto-Reset Duration", icon: "timer.circle.fill") {
-                            VStack(spacing: 24) {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Select how long to wait for user interaction before returning to the home screen")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                                
-                                // Timeout options
-                                VStack(spacing: 12) {
-                                    ForEach(timeoutOptions, id: \.0) { option in
-                                        TimeoutOptionCard(
-                                            value: option.0,
-                                            label: option.1,
-                                            isSelected: timeoutDuration == option.0,
-                                            onSelect: {
-                                                timeoutDuration = option.0
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 100) // Add padding for fixed save button
-                }
-            }
-            
-            // 🆕 Fixed save button at bottom
-            VStack(spacing: 0) {
-                // Subtle separator
-                Rectangle()
-                    .fill(Color(.separator))
-                    .frame(height: 0.5)
-                
-                // Save button container
-                VStack(spacing: 16) {
-                    Button(action: saveSettings) {
-                        HStack {
-                            if isSaving {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.9)
-                                
-                                Text("Saving...")
-                            } else {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 16, weight: .semibold))
-                                
-                                Text("Save Settings")
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
-                    }
-                    .disabled(isSaving)
+                    Text("Configure how long the kiosk waits before automatically resetting to the home screen")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 24)
-                .padding(.vertical, 20)
-                .background(
-                    Color(.systemBackground)
-                        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: -5)
-                )
+                .padding(.top, 24)
+                
+                // Main content - just the timeout duration card
+                VStack(spacing: 20) {
+                    SettingsCard(title: "Auto-Reset Duration", icon: "timer.circle.fill") {
+                        VStack(spacing: 24) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Select how long to wait for user interaction before returning to the home screen")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            // Show custom value notice if user has a value not in the new options
+                            if !timeoutOptions.contains(where: { $0.0 == timeoutDuration }) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "info.circle.fill")
+                                            .foregroundStyle(.blue)
+                                        
+                                        Text("Current Setting: \(formatTimeoutDuration(timeoutDuration))")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                    }
+                                    
+                                    Text("Your current timeout setting will be preserved. Select a new option below to change it.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(12)
+                                .background(Color.blue.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            
+                            // Timeout options
+                            VStack(spacing: 12) {
+                                ForEach(timeoutOptions, id: \.0) { option in
+                                    TimeoutOptionCard(
+                                        value: option.0,
+                                        label: option.1,
+                                        isSelected: timeoutDuration == option.0,
+                                        isRecommended: option.0 == "15",
+                                        onSelect: {
+                                            timeoutDuration = option.0
+                                            autoSaveSettings()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
             }
         }
         .background(Color(.systemGroupedBackground))
         .onAppear {
             timeoutDuration = kioskStore.timeoutDuration
         }
-        .overlay(alignment: .top) {
-            if showToast {
-                ToastNotification(message: "Settings saved successfully")
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showToast)
-                    .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            showToast = false
-                        }
-                    }
-            }
+    }
+    
+    // MARK: - Helper Functions
+    
+    private func formatTimeoutDuration(_ duration: String) -> String {
+        guard let seconds = Int(duration) else { return "\(duration) seconds" }
+        
+        if seconds < 60 {
+            return "\(seconds) seconds"
+        } else if seconds == 60 {
+            return "1 minute"
+        } else if seconds < 3600 && seconds % 60 == 0 {
+            return "\(seconds / 60) minutes"
+        } else {
+            return "\(seconds) seconds"
         }
     }
     
-    func saveSettings() {
-        isSaving = true
-        
+    // MARK: - Auto-Save Functions
+    
+    private func autoSaveSettings() {
         kioskStore.timeoutDuration = timeoutDuration
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            kioskStore.saveSettings()
-            isSaving = false
-            showToast = true
-        }
+        kioskStore.saveSettings()
     }
 }
 
-
+// MARK: - Supporting Views
 
 struct TimeoutOptionCard: View {
     let value: String
     let label: String
     let isSelected: Bool
+    let isRecommended: Bool
     let onSelect: () -> Void
     
     var body: some View {
@@ -172,7 +152,7 @@ struct TimeoutOptionCard: View {
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
                     
-                    if value == "60" {
+                    if isRecommended {
                         Text("Recommended")
                             .font(.caption)
                             .foregroundStyle(.blue)
@@ -201,10 +181,6 @@ struct TimeoutOptionCard: View {
         .buttonStyle(PlainButtonStyle())
     }
 }
-
-
-
-
 
 struct TimeoutSettingsView_Previews: PreviewProvider {
     static var previews: some View {

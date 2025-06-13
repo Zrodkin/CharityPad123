@@ -8,16 +8,15 @@ struct PresetAmountsView: View {
     @State private var allowCustomAmount: Bool = true
     @State private var minAmount: String = "1"
     @State private var maxAmount: String = "100000"
-    @State private var isDirty = false
-    @State private var isSaving = false
-    @State private var showToast = false
-    @State private var toastMessage = "Settings saved successfully"
     @State private var showingAddAmountSheet = false
     @State private var newAmountString = ""
     
+    // Auto-save timer
+    @State private var autoSaveTimer: Timer?
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Header with save button
+            // Header without save button
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Donation Amounts")
@@ -30,31 +29,6 @@ struct PresetAmountsView: View {
                 }
                 
                 Spacer()
-                
-                // Save button in header
-                Button(action: saveSettings) {
-                    HStack(spacing: 6) {
-                        if isSaving {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 14, weight: .semibold))
-                        }
-                        
-                        Text(isSaving ? "Saving..." : "Save")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(isDirty ? Color.blue : Color(.systemGray4))
-                    .foregroundColor(isDirty ? .white : .secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .disabled(!isDirty || isSaving)
-                .animation(.easeInOut(duration: 0.2), value: isDirty)
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -75,11 +49,11 @@ struct PresetAmountsView: View {
                                     amount: donation.amount,
                                     onAmountChange: { newAmount in
                                         kioskStore.updatePresetDonation(at: index, amount: newAmount)
-                                        isDirty = true
+                                        scheduleAutoSave()
                                     },
                                     onRemove: {
                                         kioskStore.removePresetDonation(at: index)
-                                        isDirty = true
+                                        autoSaveSettings()
                                     },
                                     canRemove: kioskStore.presetDonations.count > 1
                                 )
@@ -122,7 +96,7 @@ struct PresetAmountsView: View {
                                 Toggle("", isOn: $allowCustomAmount)
                                     .toggleStyle(SwitchToggleStyle(tint: .blue))
                                     .onChange(of: allowCustomAmount) { _, _ in
-                                        isDirty = true
+                                        scheduleAutoSave()
                                     }
                             }
                             .padding(16)
@@ -151,7 +125,7 @@ struct PresetAmountsView: View {
                                                     .keyboardType(.numberPad)
                                                     .textFieldStyle(CompactTextFieldStyle())
                                                     .onChange(of: minAmount) { _, _ in
-                                                        isDirty = true
+                                                        scheduleAutoSave()
                                                     }
                                             }
                                         }
@@ -169,7 +143,7 @@ struct PresetAmountsView: View {
                                                     .keyboardType(.numberPad)
                                                     .textFieldStyle(CompactTextFieldStyle())
                                                     .onChange(of: maxAmount) { _, _ in
-                                                        isDirty = true
+                                                        scheduleAutoSave()
                                                     }
                                             }
                                         }
@@ -207,27 +181,16 @@ struct PresetAmountsView: View {
                 isPresented: $showingAddAmountSheet,
                 onAdd: { amount in
                     kioskStore.addPresetDonation(amount: amount)
-                    isDirty = true
+                    autoSaveSettings()
                 },
                 onError: { message in
-                    toastMessage = message
-                    showToast = true
+                    // Handle error silently or with a different approach
+                    print("Error adding amount: \(message)")
                 }
             )
             .presentationDetents([.height(300)])
         }
-        .overlay(alignment: .top) {
-            if showToast {
-                ToastNotification(message: toastMessage)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showToast)
-                    .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            showToast = false
-                        }
-                    }
-            }
-        }
+     
     }
     
     // MARK: - Functions
@@ -236,23 +199,28 @@ struct PresetAmountsView: View {
         allowCustomAmount = kioskStore.allowCustomAmount
         minAmount = kioskStore.minAmount
         maxAmount = kioskStore.maxAmount
-        isDirty = false
     }
     
-    func saveSettings() {
-        isSaving = true
+    // MARK: - Auto-Save Functions
+    
+    private func scheduleAutoSave() {
+        // Cancel existing timer
+        autoSaveTimer?.invalidate()
         
+        // Schedule new timer with 1 second delay
+        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+            autoSaveSettings()
+        }
+    }
+    
+    private func autoSaveSettings() {
         kioskStore.allowCustomAmount = allowCustomAmount
         kioskStore.minAmount = minAmount
         kioskStore.maxAmount = maxAmount
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            kioskStore.saveSettings()
-            isSaving = false
-            isDirty = false
-            toastMessage = "Settings saved successfully"
-            showToast = true
-        }
+        kioskStore.saveSettings()
+        
+    
     }
 }
 
@@ -440,6 +408,8 @@ struct CompactTextFieldStyle: TextFieldStyle {
             .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
+
+
 
 struct PresetAmountsView_Previews: PreviewProvider {
     static var previews: some View {

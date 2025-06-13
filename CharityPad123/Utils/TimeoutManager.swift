@@ -5,7 +5,6 @@
 //  Created by Zalman Rodkin on 6/9/25.
 //
 
-
 import SwiftUI
 import Combine
 
@@ -16,7 +15,7 @@ class TimeoutManager: ObservableObject {
     private var timeoutDuration: TimeInterval
     private var onTimeout: (() -> Void)?
     
-    init(timeoutDuration: TimeInterval = 10.0) {
+    init(timeoutDuration: TimeInterval = 15.0) {  
         self.timeoutDuration = timeoutDuration
     }
     

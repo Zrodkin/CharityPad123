@@ -18,14 +18,14 @@ class KioskStore: ObservableObject {
     // MARK: - Published Properties
     
     @Published var headline: String = "Tap to Donate"
-    @Published var subtext: String = "Support our mission with your generous donation"
+    @Published var subtext: String = ""
     @Published var backgroundImage: UIImage?
     @Published var logoImage: UIImage?
     @Published var presetDonations: [PresetDonation] = []
     @Published var allowCustomAmount: Bool = true
     @Published var minAmount: String = "1"
     @Published var maxAmount: String = "100000"
-    @Published var timeoutDuration: String = "60"
+    @Published var timeoutDuration: String = "15"
     @Published var homePageEnabled: Bool = true
     
     // MARK: - Catalog Sync State
@@ -40,6 +40,7 @@ class KioskStore: ObservableObject {
     // MARK: - Initialization
     
     init() {
+        setDefaultsIfNeeded()
         loadFromUserDefaults()
         
         // NEW: Listen for catalog state clear notifications
@@ -50,6 +51,15 @@ class KioskStore: ObservableObject {
         ) { [weak self] _ in
             self?.clearCatalogState()
         }
+    }
+    private func setDefaultsIfNeeded() {
+        let defaults: [String: Any] = [
+            "kioskHomePageEnabled": true,
+            "kioskAllowCustomAmount": true,
+            "kioskTimeoutDuration": "15"
+        ]
+        
+        UserDefaults.standard.register(defaults: defaults)
     }
     
     deinit {
@@ -144,6 +154,18 @@ class KioskStore: ObservableObject {
         if let lastSyncTimeInterval = UserDefaults.standard.object(forKey: "kioskLastSyncTime") as? TimeInterval {
             self.lastSyncTime = Date(timeIntervalSince1970: lastSyncTimeInterval)
         }
+        
+        if presetDonations.isEmpty {
+              presetDonations = [
+                  PresetDonation(id: UUID().uuidString, amount: "18", catalogItemId: nil, isSync: false),
+                  PresetDonation(id: UUID().uuidString, amount: "36", catalogItemId: nil, isSync: false),
+                  PresetDonation(id: UUID().uuidString, amount: "54", catalogItemId: nil, isSync: false),
+                  PresetDonation(id: UUID().uuidString, amount: "100", catalogItemId: nil, isSync: false),
+                  PresetDonation(id: UUID().uuidString, amount: "180", catalogItemId: nil, isSync: false),
+                  PresetDonation(id: UUID().uuidString, amount: "360", catalogItemId: nil, isSync: false)
+              ]
+              saveToUserDefaults() // Save the defaults
+          }
     }
     
     /// Save settings to UserDefaults
