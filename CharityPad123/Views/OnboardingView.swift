@@ -1,5 +1,4 @@
-// Updated OnboardingView.swift with permission request
-
+// Fixed OnboardingView.swift
 import SwiftUI
 import SafariServices
 import CoreLocation
@@ -97,12 +96,12 @@ struct OnboardingView: View {
                 } else {
                     // Connect button
                     Button(action: {
+                        // 🔧 CRITICAL FIX: Check authentication state first
                         if squareAuthService.isAuthenticated {
-                            // If already authenticated, complete onboarding immediately
-                            hasCompletedOnboarding = true
-                            print("Already authenticated, completing onboarding directly")
+                            print("✅ Already authenticated during button press - completing onboarding immediately")
+                            completeOnboarding()
                         } else {
-                            // NEW: Request location permission first, then start auth
+                            print("🔄 Not authenticated - starting auth flow")
                             requestLocationThenAuth()
                         }
                     }) {
@@ -180,7 +179,6 @@ struct OnboardingView: View {
                 // Start intensive polling
                 if squareAuthService.pendingAuthState != nil {
                     print("Found pending auth state: \(squareAuthService.pendingAuthState!)")
-                    // Start polling with shorter interval for better responsiveness
                     startIntensivePolling()
                 } else {
                     print("WARNING: No pending auth state found after Safari dismissed!")
@@ -189,7 +187,6 @@ struct OnboardingView: View {
             }
         }) {
             if let url = authURL {
-                // Show Safari directly with a custom coordinator to handle URL scheme callbacks
                 SafariView(url: url, onDismiss: {
                     if !squareAuthService.isAuthenticated {
                         showingSafari = false
@@ -197,8 +194,19 @@ struct OnboardingView: View {
                 })
             }
         }
-        // Check authentication on appearance
         .onAppear {
+            print("🔍 OnboardingView appeared - checking auth state")
+            print("📱 squareAuthService.isAuthenticated: \(squareAuthService.isAuthenticated)")
+            print("📱 hasCompletedOnboarding: \(hasCompletedOnboarding)")
+            
+            // 🔧 CRITICAL FIX: Check if already authenticated on appear
+            if squareAuthService.isAuthenticated {
+                print("✅ Already authenticated on appear - completing onboarding immediately")
+                completeOnboarding()
+                return
+            }
+            
+            // Only check authentication if not already authenticated
             squareAuthService.checkAuthentication()
             
             // Set up notification observer for OAuth callback
@@ -208,8 +216,6 @@ struct OnboardingView: View {
                 queue: .main
             ) { notification in
                 print("OnboardingView: Received OAuth callback notification")
-                
-                // Handle the notification
                 handleOAuthCallback(notification)
                 
                 // Close Safari view if open
@@ -229,22 +235,20 @@ struct OnboardingView: View {
                 notificationObserver = nil
             }
         }
-        // Monitor authentication state changes
+        // 🔧 CRITICAL FIX: Improved monitoring of authentication state changes
         .onReceive(squareAuthService.$isAuthenticated) { isAuthenticated in
+            print("🔄 OnboardingView: Auth state changed to \(isAuthenticated)")
+            
             if isAuthenticated {
-                print("Authentication state changed to true, setting hasCompletedOnboarding")
-                hasCompletedOnboarding = true
-                
-                // Reset loading state in case it was active
-                isLoading = false
-                safariDismissed = false
-                
-                // Cancel any active polling
-                pollingTimer?.invalidate()
-                pollingTimer = nil
+                print("✅ Authentication detected - completing onboarding")
+                completeOnboarding()
             }
         }
-        // NEW: Show location permission alert when needed
+        // 🔧 ADDITIONAL FIX: Also monitor for explicit authentication success
+        .onReceive(NotificationCenter.default.publisher(for: .squareAuthenticationSuccessful)) { _ in
+            print("✅ Received explicit authentication success notification")
+            completeOnboarding()
+        }
         .alert("Location Permission Required", isPresented: $locationManager.showingPermissionAlert) {
             Button("Settings") {
                 if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
@@ -259,7 +263,28 @@ struct OnboardingView: View {
         }
     }
     
-    // NEW: Request location permission first, then start auth
+    // 🔧 NEW: Centralized onboarding completion method
+    private func completeOnboarding() {
+        print("🏁 Completing onboarding...")
+        
+        // Stop any ongoing timers
+        pollingTimer?.invalidate()
+        pollingTimer = nil
+        
+        // Reset loading states
+        isLoading = false
+        safariDismissed = false
+        
+        // Complete onboarding
+        hasCompletedOnboarding = true
+        
+        print("✅ Onboarding completed - hasCompletedOnboarding set to true")
+        
+        // 🔧 POST NOTIFICATION: Ensure all observers know onboarding is complete
+        NotificationCenter.default.post(name: NSNotification.Name("OnboardingCompleted"), object: nil)
+    }
+    
+    // Request location permission first, then start auth
     private func requestLocationThenAuth() {
         print("🔍 Requesting location permission before auth...")
         
@@ -273,34 +298,39 @@ struct OnboardingView: View {
                 } else {
                     print("❌ Location permission denied")
                     self.isLoading = false
-                    // Alert is handled by LocationPermissionManager
                 }
             }
         }
     }
     
-    // ... rest of your existing methods (handleOAuthCallback, startIntensivePolling, startAuth) remain the same ...
-    
     // Handle OAuth callback notification
     private func handleOAuthCallback(_ notification: Notification) {
+        print("🔄 Handling OAuth callback in OnboardingView")
+        
         // Extract success/error from notification userInfo
         if let userInfo = notification.userInfo,
            let success = userInfo["success"] as? Bool {
             print("OAuth callback received with success: \(success)")
             
             if success {
-                // Stop polling and check authentication
+                // Stop polling and reset state
                 pollingTimer?.invalidate()
                 pollingTimer = nil
-                
-                // Reset state variables
                 isLoading = false
                 safariDismissed = false
                 
-                print("Safari should be automatically closed by SafariView")
+                print("🔄 OAuth callback successful - checking auth service state")
                 
-                // Directly check authentication to update state
-                squareAuthService.checkAuthentication()
+                // 🔧 FIX: Give the auth service a moment to update, then complete
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if self.squareAuthService.isAuthenticated {
+                        print("✅ Auth service confirmed authenticated - completing onboarding")
+                        self.completeOnboarding()
+                    } else {
+                        print("🔄 Auth service not yet updated - triggering check")
+                        self.squareAuthService.checkAuthentication()
+                    }
+                }
             } else {
                 // Handle error
                 if let error = userInfo["error"] as? String {
@@ -312,21 +342,12 @@ struct OnboardingView: View {
                 safariDismissed = false
             }
         }
-        // If notification contains a URL object
-        else if let url = notification.object as? URL {
-            print("Received OAuth callback with URL: \(url)")
-            
-            // Process URL if needed
-            // This might be needed if your AppDelegate/SceneDelegate is passing the raw URL
-        }
     }
     
     // Function to start more intensive polling after Safari is dismissed
     private func startIntensivePolling() {
-        // Cancel any existing timer
         pollingTimer?.invalidate()
         
-        // Create a timer that checks status more frequently (every 0.5 seconds)
         pollingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             squareAuthService.checkPendingAuthorization { success in
                 if success {
@@ -334,6 +355,11 @@ struct OnboardingView: View {
                     pollingTimer?.invalidate()
                     pollingTimer = nil
                     safariDismissed = false
+                    
+                    // 🔧 FIX: Complete onboarding when polling succeeds
+                    DispatchQueue.main.async {
+                        self.completeOnboarding()
+                    }
                 }
             }
         }
@@ -356,7 +382,6 @@ struct OnboardingView: View {
     private func startAuth() {
         print("Starting Square OAuth flow directly...")
         
-        // Get authorization URL from your backend
         SquareConfig.generateOAuthURL { url, error, state in
             DispatchQueue.main.async {
                 if let error = error {
@@ -371,7 +396,6 @@ struct OnboardingView: View {
                     return
                 }
                 
-                // Set state if available
                 if let state = state {
                     print("Setting pendingAuthState to: \(state)")
                     squareAuthService.pendingAuthState = state
@@ -379,18 +403,16 @@ struct OnboardingView: View {
                     print("WARNING: No state returned from generateOAuthURL")
                 }
                 
-                // Store URL and update state
                 self.authURL = url
                 squareAuthService.isAuthenticating = true
                 
-                // Show Safari directly
                 self.showingSafari = true
             }
         }
     }
 }
 
-// NEW: Location Permission Manager
+// Location Permission Manager (unchanged)
 class LocationPermissionManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var showingPermissionAlert = false
     
@@ -429,8 +451,6 @@ class LocationPermissionManager: NSObject, ObservableObject, CLLocationManagerDe
         }
     }
     
-    // MARK: - CLLocationManagerDelegate
-    
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
         print("📍 Location authorization changed to: \(status)")
@@ -447,14 +467,12 @@ class LocationPermissionManager: NSObject, ObservableObject, CLLocationManagerDe
             
         case .notDetermined:
             print("📍 Location permission still not determined")
-            // Don't call completion yet, wait for user decision
             
         @unknown default:
             print("⚠️ Unknown location authorization status")
             permissionCompletion?(false)
         }
         
-        // Clear completion to avoid duplicate calls
         if status != .notDetermined {
             permissionCompletion = nil
         }
