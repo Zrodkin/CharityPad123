@@ -136,60 +136,65 @@ struct HomeView: View {
     // Extract home page content to a computed property for cleaner code
     // CONSISTENT LAYOUT: Using standard positioning
     private var homePageContent: some View {
-        ZStack {
-            // Background image
-            if let backgroundImage = kioskStore.backgroundImage {
-                Image(uiImage: backgroundImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+        GeometryReader { geometry in
+            ZStack {
+                // Background image
+                if let backgroundImage = kioskStore.backgroundImage {
+                    Image(uiImage: backgroundImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .edgesIgnoringSafeArea(.all)
+                } else {
+                    Image("logoImage")
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .edgesIgnoringSafeArea(.all)
+                        .onAppear {
+                            if UIImage(named: "logoImage") == nil {
+                                print("Warning: 'logoImage' not found in asset catalog.")
+                            }
+                        }
+                }
+                
+                Color.black.opacity(0.3)
                     .edgesIgnoringSafeArea(.all)
-            } else {
-                Image("logoImage")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .edgesIgnoringSafeArea(.all)
-                    .onAppear {
-                        if UIImage(named: "logoImage") == nil {
-                            print("Warning: 'logoImage' not found in asset catalog.")
+                
+                // UPDATED: Dynamic text positioning
+                VStack(spacing: 0) {
+                    Spacer()
+                        .frame(height: KioskLayoutConstants.topContentOffset)
+                    
+                    VStack(spacing: 10) {
+                        Text(kioskStore.headline)
+                            .font(.system(size: kioskStore.headlineTextSize, weight: .bold))
+                            .foregroundColor(.white)
+                            .shadow(radius: 10)
+                            .multilineTextAlignment(.center)
+                        
+                        if !kioskStore.subtext.isEmpty {
+                            Text(kioskStore.subtext)
+                                .font(.system(size: kioskStore.subtextTextSize))
+                                .foregroundColor(.white)
+                                .shadow(radius: 5)
+                                .multilineTextAlignment(.center)
                         }
                     }
-            }
-            
-            Color.black.opacity(0.3)
-                .edgesIgnoringSafeArea(.all)
-            
-            // CONSISTENT: Centered content with standard positioning
-            VStack(spacing: 0) {
-                Spacer()
-                    .frame(height: KioskLayoutConstants.topContentOffset)
-
-                VStack(spacing: 10) { // This is the VStack we'll offset
-                    Text(kioskStore.headline)
-                        .font(.system(size: 90, weight: .bold))
-                        .foregroundColor(.white)
-                        .shadow(radius: 10)
-                        .multilineTextAlignment(.center)
-
-                    if !kioskStore.subtext.isEmpty {
-                        Text(kioskStore.subtext)
-                            .font(.system(size: 30))
-                            .foregroundColor(.white)
-                            .shadow(radius: 5)
-                            .multilineTextAlignment(.center)
-                    }
+                    .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
+                    .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
+                    .offset(y: KioskLayoutConstants.calculateVerticalOffset(
+                        position: kioskStore.textVerticalPosition,
+                        fineTuning: kioskStore.textVerticalFineTuning,
+                        screenHeight: geometry.size.height
+                    ))
+                    
+                    Spacer()
+                        .frame(height: KioskLayoutConstants.bottomSafeArea)
                 }
-                .frame(maxWidth: KioskLayoutConstants.maxContentWidth)
-                .padding(.horizontal, KioskLayoutConstants.contentHorizontalPadding)
-                .offset(y: -10) // <<---- ADD THIS LINE (adjust -20 as needed)
-
-                Spacer()
-                    .frame(height: KioskLayoutConstants.bottomSafeArea)
             }
-
+            .contentShape(Rectangle())
         }
-             .contentShape(Rectangle())
-         }
-     }
+    }
+}
 
      // MARK: - Preview (moved outside of HomeView struct)
      struct HomeView_Previews: PreviewProvider {

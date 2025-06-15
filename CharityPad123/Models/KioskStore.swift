@@ -28,6 +28,11 @@ class KioskStore: ObservableObject {
     @Published var timeoutDuration: String = "15"
     @Published var homePageEnabled: Bool = true
     
+    @Published var textVerticalPosition: KioskLayoutConstants.VerticalTextPosition = .center
+    @Published var textVerticalFineTuning: Double = 0.0  // Range: -50 to +50
+    @Published var headlineTextSize: Double = KioskLayoutConstants.defaultHeadlineSize
+    @Published var subtextTextSize: Double = KioskLayoutConstants.defaultSubtextSize
+    
     // MARK: - Catalog Sync State
     @Published var isSyncingWithCatalog: Bool = false
     @Published var lastSyncError: String? = nil
@@ -155,19 +160,38 @@ class KioskStore: ObservableObject {
             self.lastSyncTime = Date(timeIntervalSince1970: lastSyncTimeInterval)
         }
         
+        // Load layout customization settings
+        if let positionRaw = UserDefaults.standard.string(forKey: "kioskTextVerticalPosition"),
+           let position = KioskLayoutConstants.VerticalTextPosition(rawValue: positionRaw) {
+            self.textVerticalPosition = position
+        }
+
+        self.textVerticalFineTuning = UserDefaults.standard.double(forKey: "kioskTextVerticalFineTuning")
+
+        let savedHeadlineSize = UserDefaults.standard.double(forKey: "kioskHeadlineTextSize")
+        if savedHeadlineSize > 0 {
+            self.headlineTextSize = savedHeadlineSize
+        }
+
+        let savedSubtextSize = UserDefaults.standard.double(forKey: "kioskSubtextTextSize")
+        if savedSubtextSize > 0 {
+            self.subtextTextSize = savedSubtextSize
+        }
+        
         if presetDonations.isEmpty {
-              presetDonations = [
-                  PresetDonation(id: UUID().uuidString, amount: "18", catalogItemId: nil, isSync: false),
-                  PresetDonation(id: UUID().uuidString, amount: "36", catalogItemId: nil, isSync: false),
-                  PresetDonation(id: UUID().uuidString, amount: "54", catalogItemId: nil, isSync: false),
-                  PresetDonation(id: UUID().uuidString, amount: "100", catalogItemId: nil, isSync: false),
-                  PresetDonation(id: UUID().uuidString, amount: "180", catalogItemId: nil, isSync: false),
-                  PresetDonation(id: UUID().uuidString, amount: "360", catalogItemId: nil, isSync: false)
-              ]
-              saveToUserDefaults() // Save the defaults
-          }
+            presetDonations = [
+                PresetDonation(id: UUID().uuidString, amount: "18", catalogItemId: nil, isSync: false),
+                PresetDonation(id: UUID().uuidString, amount: "36", catalogItemId: nil, isSync: false),
+                PresetDonation(id: UUID().uuidString, amount: "54", catalogItemId: nil, isSync: false),
+                PresetDonation(id: UUID().uuidString, amount: "100", catalogItemId: nil, isSync: false),
+                PresetDonation(id: UUID().uuidString, amount: "180", catalogItemId: nil, isSync: false),
+                PresetDonation(id: UUID().uuidString, amount: "360", catalogItemId: nil, isSync: false)
+            ]
+            saveToUserDefaults() // Save the defaults
+        }
     }
-    
+
+
     /// Save settings to UserDefaults
     func saveToUserDefaults() {
         UserDefaults.standard.set(headline, forKey: "kioskHeadline")
@@ -195,6 +219,12 @@ class KioskStore: ObservableObject {
         UserDefaults.standard.set(maxAmount, forKey: "kioskMaxAmount")
         UserDefaults.standard.set(timeoutDuration, forKey: "kioskTimeoutDuration")
         UserDefaults.standard.set(homePageEnabled, forKey: "kioskHomePageEnabled")
+        
+        // Save layout customization settings
+        UserDefaults.standard.set(textVerticalPosition.rawValue, forKey: "kioskTextVerticalPosition")
+        UserDefaults.standard.set(textVerticalFineTuning, forKey: "kioskTextVerticalFineTuning")
+        UserDefaults.standard.set(headlineTextSize, forKey: "kioskHeadlineTextSize")
+        UserDefaults.standard.set(subtextTextSize, forKey: "kioskSubtextTextSize")
         
         // Save logo image or remove it if nil
         if let logoImage = logoImage, let logoData = logoImage.jpegData(compressionQuality: 0.8) {
