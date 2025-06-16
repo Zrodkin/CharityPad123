@@ -44,27 +44,8 @@ struct ContentView: View {
             refreshTrigger.toggle()
         }
         .onAppear {
-            // Don't do state checks during logout
-            if !squareAuthService.isExplicitlyLoggingOut {
-                ensureStateConsistency()
-                squareAuthService.checkAuthentication()
-                
-                // Initialize the SDK if we're already authenticated
-                if squareAuthService.isAuthenticated {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        squarePaymentService.initializeSDK()
-                    }
-                }
-            }
-            
-            // Health check monitoring can run regardless
-            squarePaymentService.startHealthCheckMonitoring()
-            
-            if squareAuthService.isAuthenticated && !squareAuthService.isExplicitlyLoggingOut {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                    squarePaymentService.performHealthCheck()
-                }
-            }
+            // 🚀 OPTIMIZED: Fast startup with delayed heavy operations
+            performOptimizedStartup()
         }
         // Add listener for authentication state changes
         .onChange(of: squareAuthService.isAuthenticated) { _, isAuthenticated in
@@ -87,6 +68,103 @@ struct ContentView: View {
             isInAdminMode = false
         }
     }
+    
+    // 🚀 NEW: Optimized startup sequence
+    private func performOptimizedStartup() {
+        print("🚀 Starting optimized app startup...")
+        
+        // IMMEDIATE: Only essential checks that don't block UI
+        guard !squareAuthService.isExplicitlyLoggingOut else {
+            print("🚫 Skipping startup - logout in progress")
+            return
+        }
+        
+        // IMMEDIATE: Fast state consistency check
+        ensureStateConsistency()
+        
+        // DELAYED: Heavy operations with staggered timing
+        scheduleHeavyOperations()
+    }
+    
+    private func scheduleHeavyOperations() {
+        // Stage 1: Quick auth check (only if we have local tokens) - 0.3s delay
+        Task {
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                await MainActor.run {
+                    performQuickAuthCheck()
+                }
+            } catch {
+                print("⚠️ Task cancelled during auth check delay")
+            }
+        }
+        
+        // Stage 2: SDK initialization - 1s delay
+        Task {
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                await MainActor.run {
+                    initializeSDKIfNeeded()
+                }
+            } catch {
+                print("⚠️ Task cancelled during SDK init delay")
+            }
+        }
+        
+        // Stage 3: Health monitoring - 2s delay
+        Task {
+            do {
+                try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                await MainActor.run {
+                    startHealthMonitoring()
+                }
+            } catch {
+                print("⚠️ Task cancelled during health monitoring delay")
+            }
+        }
+        
+        // Stage 4: Full health check - 3s delay
+        Task {
+            do {
+                try await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+                await MainActor.run {
+                    performFullHealthCheck()
+                }
+            } catch {
+                print("⚠️ Task cancelled during health check delay")
+            }
+        }
+    }
+    
+    private func performQuickAuthCheck() {
+        // Only check auth if we have local tokens (fast local check)
+        if squareAuthService.hasLocalTokens() {
+            print("🔐 Quick auth check with local tokens...")
+            squareAuthService.checkAuthentication()
+        } else {
+            print("🔐 No local tokens - skipping auth check")
+        }
+    }
+    
+    private func initializeSDKIfNeeded() {
+        if squareAuthService.isAuthenticated && !squareAuthService.isExplicitlyLoggingOut {
+            print("🔧 Initializing Square SDK...")
+            squarePaymentService.initializeSDK()
+        }
+    }
+    
+    private func startHealthMonitoring() {
+        print("🏥 Starting health check monitoring...")
+        squarePaymentService.startHealthCheckMonitoring()
+    }
+    
+    private func performFullHealthCheck() {
+        if squareAuthService.isAuthenticated && !squareAuthService.isExplicitlyLoggingOut {
+            print("🏥 Performing full health check...")
+            squarePaymentService.performHealthCheck()
+        }
+    }
+    
     // NEW: Ensure app state is consistent on startup
     private func ensureStateConsistency() {
         print("🔧 Checking app state consistency...")
@@ -101,7 +179,6 @@ struct ContentView: View {
             return
         }
         
-        
         print("✅ App state consistency check passed")
     }
     
@@ -115,9 +192,16 @@ struct ContentView: View {
         // Reset donation state
         donationViewModel.resetDonation()
         
-        
         // Ensure in-memory state is clean for a fresh start
         print("App state reset for fresh onboarding")
+    }
+}
+
+// MARK: - Extension for SquareAuthService (add this method if it doesn't exist)
+extension SquareAuthService {
+    func hasLocalTokens() -> Bool {
+        // Add this method to your SquareAuthService if it doesn't exist
+        return accessToken != nil && tokenExpirationDate != nil
     }
 }
 

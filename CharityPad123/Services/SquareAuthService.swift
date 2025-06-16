@@ -170,6 +170,8 @@ class SquareAuthService: ObservableObject {
     
     // MARK: - Authentication Methods
     
+    
+    
     func checkAuthentication() {
         // 🔧 CRITICAL FIX: Don't check auth during explicit logout
         if isExplicitlyLoggingOut || logoutInProgress {
@@ -1025,6 +1027,39 @@ class SquareAuthService: ObservableObject {
 }
 
 // MARK: - Notification Names Extension
+
+extension SquareAuthService {
+    
+    // Make checkAuthentication truly async
+    func checkAuthenticationAsync() async {
+        guard !isExplicitlyLoggingOut, !logoutInProgress else {
+            return
+        }
+        
+        // Check local tokens first (fast)
+        guard let _ = accessToken, let expirationDate = tokenExpirationDate else {
+            await MainActor.run {
+                self.isAuthenticated = false
+            }
+            return
+        }
+        
+        if expirationDate <= Date() {
+            await MainActor.run {
+                self.isAuthenticated = false
+            }
+            return
+        }
+        
+        // Only then check server (slow)
+        await checkServerAuthentication()
+    }
+    
+    private func checkServerAuthentication() async {
+        // [Move your existing server check logic here]
+        // This prevents blocking the main thread
+    }
+}
 
 extension Notification.Name {
     static let squareAuthenticationStatusChanged = Notification.Name("SquareAuthenticationStatusChanged")
