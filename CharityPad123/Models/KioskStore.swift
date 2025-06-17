@@ -33,6 +33,10 @@ class KioskStore: ObservableObject {
     @Published var headlineTextSize: Double = KioskLayoutConstants.defaultHeadlineSize
     @Published var subtextTextSize: Double = KioskLayoutConstants.defaultSubtextSize
     
+    @Published var backgroundImageZoom: Double = 1.0
+    @Published var backgroundImagePanX: Double = 0.0
+    @Published var backgroundImagePanY: Double = 0.0
+    
     // MARK: - Catalog Sync State
     @Published var isSyncingWithCatalog: Bool = false
     @Published var lastSyncError: String? = nil
@@ -178,6 +182,14 @@ class KioskStore: ObservableObject {
             self.subtextTextSize = savedSubtextSize
         }
         
+        let savedZoom = UserDefaults.standard.double(forKey: "kioskBackgroundImageZoom")
+             if savedZoom > 0 {
+                 self.backgroundImageZoom = savedZoom
+             }
+             
+             self.backgroundImagePanX = UserDefaults.standard.double(forKey: "kioskBackgroundImagePanX")
+             self.backgroundImagePanY = UserDefaults.standard.double(forKey: "kioskBackgroundImagePanY")
+        
         if presetDonations.isEmpty {
             presetDonations = [
                 PresetDonation(id: UUID().uuidString, amount: "18", catalogItemId: nil, isSync: false),
@@ -225,6 +237,12 @@ class KioskStore: ObservableObject {
         UserDefaults.standard.set(textVerticalFineTuning, forKey: "kioskTextVerticalFineTuning")
         UserDefaults.standard.set(headlineTextSize, forKey: "kioskHeadlineTextSize")
         UserDefaults.standard.set(subtextTextSize, forKey: "kioskSubtextTextSize")
+        
+        // 🆕 ADD THESE LINES - Save zoom and pan settings
+        UserDefaults.standard.set(backgroundImageZoom, forKey: "kioskBackgroundImageZoom")
+        UserDefaults.standard.set(backgroundImagePanX, forKey: "kioskBackgroundImagePanX")
+        UserDefaults.standard.set(backgroundImagePanY, forKey: "kioskBackgroundImagePanY")
+               
         
         // Save logo image or remove it if nil
         if let logoImage = logoImage, let logoData = logoImage.jpegData(compressionQuality: 0.8) {

@@ -138,11 +138,16 @@ struct HomeView: View {
     private var homePageContent: some View {
         GeometryReader { geometry in
             ZStack {
-                // Background image
+                // Background image with zoom and pan support
                 if let backgroundImage = kioskStore.backgroundImage {
                     Image(uiImage: backgroundImage)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
+                        .scaleEffect(kioskStore.backgroundImageZoom) // 🆕 ADD ZOOM
+                        .offset(
+                            x: kioskStore.backgroundImagePanX, // 🆕 ADD PAN X
+                            y: kioskStore.backgroundImagePanY  // 🆕 ADD PAN Y
+                        )
                         .edgesIgnoringSafeArea(.all)
                 } else {
                     Image("logoImage")

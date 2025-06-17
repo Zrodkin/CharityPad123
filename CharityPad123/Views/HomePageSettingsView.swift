@@ -15,6 +15,10 @@ struct HomePageSettingsView: View {
     @State private var headlineTextSize: Double = KioskLayoutConstants.defaultHeadlineSize
     @State private var subtextTextSize: Double = KioskLayoutConstants.defaultSubtextSize
     
+    @State private var backgroundImageZoom: Double = 1.0 // NEW: Background image zoom level
+    @State private var backgroundImagePanX: Double = 0.0 // 🆕 ADD PAN X
+    @State private var backgroundImagePanY: Double = 0.0 // 🆕 ADD PAN Y
+    
     // Layout section state
     @State private var isLayoutSectionExpanded = false
     @State private var showLayoutSaveToast = false
@@ -25,6 +29,9 @@ struct HomePageSettingsView: View {
     @State private var originalTextVerticalFineTuning: Double = 0.0
     @State private var originalHeadlineTextSize: Double = KioskLayoutConstants.defaultHeadlineSize
     @State private var originalSubtextTextSize: Double = KioskLayoutConstants.defaultSubtextSize
+    @State private var originalBackgroundImageZoom: Double = 1.0 // NEW: Track original zoom
+    @State private var originalBackgroundImagePanX: Double = 0.0 // 🆕 ADD ORIGINAL PAN X
+    @State private var originalBackgroundImagePanY: Double = 0.0 // 🆕 ADD ORIGINAL PAN Y
     
     // Auto-save timer
     @State private var autoSaveTimer: Timer?
@@ -223,12 +230,18 @@ struct HomePageSettingsView: View {
             textVerticalFineTuning = kioskStore.textVerticalFineTuning
             headlineTextSize = kioskStore.headlineTextSize
             subtextTextSize = kioskStore.subtextTextSize
+            backgroundImageZoom = kioskStore.backgroundImageZoom
+            backgroundImagePanX = kioskStore.backgroundImagePanX // 🆕 LOAD PAN X
+            backgroundImagePanY = kioskStore.backgroundImagePanY // 🆕 LOAD PAN Y
             
             // Store original values for change detection
             originalTextVerticalPosition = kioskStore.textVerticalPosition
             originalTextVerticalFineTuning = kioskStore.textVerticalFineTuning
             originalHeadlineTextSize = kioskStore.headlineTextSize
             originalSubtextTextSize = kioskStore.subtextTextSize
+            originalBackgroundImageZoom = kioskStore.backgroundImageZoom
+            originalBackgroundImagePanX = kioskStore.backgroundImagePanX // 🆕 STORE ORIGINAL PAN X
+            originalBackgroundImagePanY = kioskStore.backgroundImagePanY // 🆕 STORE ORIGINAL PAN Y
         }
         .sheet(isPresented: $showingBackgroundImagePicker) {
             ImagePicker(selectedImage: $kioskStore.backgroundImage, isPresented: $showingBackgroundImagePicker)
@@ -263,12 +276,22 @@ struct HomePageSettingsView: View {
                 textVerticalFineTuning: textVerticalFineTuning,
                 headlineTextSize: headlineTextSize,
                 subtextTextSize: subtextTextSize,
+                backgroundImageZoom: $backgroundImageZoom,
+                onZoomChange: { newZoom in
+                    backgroundImageZoom = newZoom
+                    scheduleAutoSave()
+                },
+                onPanChange: { newPanX, newPanY in // 🆕 ADD PAN CALLBACK
+                    backgroundImagePanX = newPanX
+                    backgroundImagePanY = newPanY
+                    scheduleAutoSave()
+                },
                 isPresented: $showFullScreenPreview
             )
         }
     }
     
-    // MARK: - Preview Calculation Methods
+    // MARK: - Preview Calculation Methods - FIXED
     
     private func calculateTextVerticalPosition(in size: CGSize) -> CGFloat {
         let basePosition: CGFloat
@@ -282,9 +305,10 @@ struct HomePageSettingsView: View {
             basePosition = size.height * 0.75
         }
         
-        // Apply fine tuning (scale it down for preview)
-        let scaledFineTuning = textVerticalFineTuning * 0.3
-        return basePosition - scaledFineTuning
+        // FIXED: Apply fine tuning correctly (+ not -)
+        // Scale down for preview proportionally
+        let scaledFineTuning = textVerticalFineTuning * (size.height / UIScreen.main.bounds.height)
+        return basePosition + scaledFineTuning
     }
     
     private func calculatePreviewHeadlineSize() -> CGFloat {
@@ -306,9 +330,12 @@ struct HomePageSettingsView: View {
     
     private var hasLayoutChanges: Bool {
         return textVerticalPosition != originalTextVerticalPosition ||
-               textVerticalFineTuning != originalTextVerticalFineTuning ||
-               headlineTextSize != originalHeadlineTextSize ||
-               subtextTextSize != originalSubtextTextSize
+        textVerticalFineTuning != originalTextVerticalFineTuning ||
+        headlineTextSize != originalHeadlineTextSize ||
+        subtextTextSize != originalSubtextTextSize ||
+        backgroundImageZoom != originalBackgroundImageZoom ||
+        backgroundImagePanX != originalBackgroundImagePanX || // 🆕 ADD PAN X CHECK
+        backgroundImagePanY != originalBackgroundImagePanY    // 🆕 ADD PAN Y CHECK
     }
     
     private func saveLayoutSettings() {
@@ -316,14 +343,21 @@ struct HomePageSettingsView: View {
         kioskStore.textVerticalFineTuning = textVerticalFineTuning
         kioskStore.headlineTextSize = headlineTextSize
         kioskStore.subtextTextSize = subtextTextSize
+        kioskStore.backgroundImageZoom = backgroundImageZoom
+        kioskStore.backgroundImagePanX = backgroundImagePanX // 🆕 SAVE PAN X
+        kioskStore.backgroundImagePanY = backgroundImagePanY // 🆕 SAVE PAN Y
         
         kioskStore.saveSettings()
+        
         
         // Update original values after saving
         originalTextVerticalPosition = textVerticalPosition
         originalTextVerticalFineTuning = textVerticalFineTuning
         originalHeadlineTextSize = headlineTextSize
         originalSubtextTextSize = subtextTextSize
+        originalBackgroundImageZoom = backgroundImageZoom
+        originalBackgroundImagePanX = backgroundImagePanX // 🆕 UPDATE ORIGINAL PAN X
+        originalBackgroundImagePanY = backgroundImagePanY // 🆕 UPDATE ORIGINAL PAN Y
         
         showLayoutSaveToast = true
     }
@@ -333,7 +367,11 @@ struct HomePageSettingsView: View {
         textVerticalFineTuning = 0.0
         headlineTextSize = KioskLayoutConstants.defaultHeadlineSize
         subtextTextSize = KioskLayoutConstants.defaultSubtextSize
+        backgroundImageZoom = 1.0
+        backgroundImagePanX = 0.0 // 🆕 RESET PAN X
+        backgroundImagePanY = 0.0 // 🆕 RESET PAN Y
     }
+    
     
     // MARK: - Auto-Save Functions
     
@@ -351,338 +389,452 @@ struct HomePageSettingsView: View {
         kioskStore.headline = headline
         kioskStore.subtext = subtext
         kioskStore.homePageEnabled = homePageEnabled
+        kioskStore.backgroundImageZoom = backgroundImageZoom
+        kioskStore.backgroundImagePanX = backgroundImagePanX // 🆕 AUTO-SAVE PAN X
+        kioskStore.backgroundImagePanY = backgroundImagePanY // 🆕 AUTO-SAVE PAN Y
         
         kioskStore.saveSettings()
     }
-}
-
-// MARK: - Preview Content Component
-
-struct PreviewContent: View {
-    let backgroundImage: UIImage?
-    let logoImage: UIImage?
-    let headline: String
-    let subtext: String
-    let textVerticalPosition: KioskLayoutConstants.VerticalTextPosition
-    let textVerticalFineTuning: Double
-    let headlineTextSize: CGFloat
-    let subtextTextSize: CGFloat
-    let height: CGFloat
     
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.secondarySystemBackground))
-                .frame(height: height)
-                .aspectRatio(16/9, contentMode: .fit)
-            
-            // Background image if available
-            if let backgroundImage = backgroundImage {
-                Image(uiImage: backgroundImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: height)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-            } else {
-                // Empty state for when no background image is set
+    // MARK: - Preview Content Component - FIXED
+    
+    struct PreviewContent: View {
+        let backgroundImage: UIImage?
+        let logoImage: UIImage?
+        let headline: String
+        let subtext: String
+        let textVerticalPosition: KioskLayoutConstants.VerticalTextPosition
+        let textVerticalFineTuning: Double
+        let headlineTextSize: CGFloat
+        let subtextTextSize: CGFloat
+        let height: CGFloat
+        
+        var body: some View {
+            ZStack {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color(.secondarySystemBackground))
                     .frame(height: height)
-                    .overlay(
-                        VStack(spacing: 12) {
-                            Image(systemName: "photo.on.rectangle.angled")
-                                .font(.system(size: 40))
-                                .foregroundStyle(.blue)
-                            
-                            VStack(spacing: 4) {
-                                Text("Add Background Image")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.primary)
+                    .aspectRatio(16/9, contentMode: .fit)
+                
+                // Background image if available
+                if let backgroundImage = backgroundImage {
+                    Image(uiImage: backgroundImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: height)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                } else {
+                    // Empty state for when no background image is set
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.secondarySystemBackground))
+                        .frame(height: height)
+                        .overlay(
+                            VStack(spacing: 12) {
+                                Image(systemName: "photo.on.rectangle.angled")
+                                    .font(.system(size: 40))
+                                    .foregroundStyle(.blue)
                                 
-                                Text("Tap to select from your photos")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                VStack(spacing: 4) {
+                                    Text("Add Background Image")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.primary)
+                                    
+                                    Text("Tap to select from your photos")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color(.separator), lineWidth: 1)
+                        )
+                }
+                
+                // Only show overlay and text if we have a background image
+                if backgroundImage != nil {
+                    // Dark overlay
+                    Rectangle()
+                        .fill(.black.opacity(0.4))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    
+                    // Text content positioned according to settings
+                    GeometryReader { geometry in
+                        VStack(spacing: calculateTextSpacing()) {
+                            Text(headline)
+                                .font(.system(size: headlineTextSize, weight: .bold))
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                                .shadow(radius: 5)
+                            
+                            if !subtext.isEmpty {
+                                Text(subtext)
+                                    .font(.system(size: subtextTextSize))
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .multilineTextAlignment(.center)
+                                    .shadow(radius: 3)
                             }
                         }
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color(.separator), lineWidth: 1)
-                    )
+                        .frame(maxWidth: .infinity)
+                        .position(
+                            x: geometry.size.width / 2,
+                            y: calculateTextVerticalPosition(in: geometry.size)
+                        )
+                    }
+                }
+            }
+        }
+        
+        // FIXED: Consistent positioning calculation
+        private func calculateTextVerticalPosition(in size: CGSize) -> CGFloat {
+            let basePosition: CGFloat
+            
+            switch textVerticalPosition {
+            case .top:
+                basePosition = size.height * 0.25
+            case .center:
+                basePosition = size.height * 0.5
+            case .bottom:
+                basePosition = size.height * 0.75
             }
             
-            // Only show overlay and text if we have a background image
-            if backgroundImage != nil {
-                // Dark overlay
-                Rectangle()
-                    .fill(.black.opacity(0.4))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                
-                // Text content positioned according to settings
-                GeometryReader { geometry in
-                    VStack(spacing: calculateTextSpacing()) {
+            // FIXED: Apply fine tuning correctly (+ not -)
+            // Scale proportionally to preview size
+            let scaledFineTuning = textVerticalFineTuning * (size.height / UIScreen.main.bounds.height)
+            return basePosition + scaledFineTuning
+        }
+        
+        private func calculateTextSpacing() -> CGFloat {
+            // Dynamic spacing based on text sizes and preview height
+            return (headlineTextSize + subtextTextSize) * 0.1 * (height / 300)
+        }
+    }
+    
+    // MARK: - Full Screen Preview - FIXED with Proper Margins
+
+    struct FullScreenPreviewView: View {
+        let backgroundImage: UIImage?
+        let logoImage: UIImage?
+        let headline: String
+        let subtext: String
+        let textVerticalPosition: KioskLayoutConstants.VerticalTextPosition
+        let textVerticalFineTuning: Double
+        let headlineTextSize: Double
+        let subtextTextSize: Double
+        @Binding var backgroundImageZoom: Double
+        let onZoomChange: (Double) -> Void
+        let onPanChange: (Double, Double) -> Void
+        @Binding var isPresented: Bool
+        
+        // Zoom and pan state
+        @GestureState private var magnification: CGFloat = 1.0
+        @GestureState private var panOffset: CGSize = .zero
+        @State private var currentZoom: CGFloat = 1.0
+        @State private var currentPan: CGSize = .zero
+        
+        var body: some View {
+            GeometryReader { geometry in
+                ZStack {
+                    // Full screen background with zoom and pan
+                    if let backgroundImage = backgroundImage {
+                        Image(uiImage: backgroundImage)
+                            .resizable()
+                            .scaledToFill()
+                            .scaleEffect(currentZoom * magnification)
+                            .offset(x: currentPan.width + panOffset.width, y: currentPan.height + panOffset.height)
+                            .ignoresSafeArea()
+                            .gesture(
+                                // Combined zoom and pan gesture
+                                SimultaneousGesture(
+                                    MagnificationGesture()
+                                        .updating($magnification) { value, state, _ in
+                                            state = value
+                                        }
+                                        .onEnded { value in
+                                            let newZoom = currentZoom * value
+                                            // Limit zoom range
+                                            currentZoom = min(max(newZoom, 0.5), 3.0)
+                                            backgroundImageZoom = Double(currentZoom)
+                                            onZoomChange(Double(currentZoom))
+                                        },
+                                    
+                                    DragGesture()
+                                        .updating($panOffset) { value, state, _ in
+                                            state = value.translation
+                                        }
+                                        .onEnded { value in
+                                            currentPan.width += value.translation.width
+                                            currentPan.height += value.translation.height
+                                            
+                                            onPanChange(Double(currentPan.width), Double(currentPan.height))
+                                        }
+                                )
+                            )
+                    } else {
+                        // Default gradient background
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .ignoresSafeArea()
+                    }
+                    
+                    // Dark overlay
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                    
+                    // Content positioned exactly like the real HomeView
+                    VStack(spacing: calculateFullScreenTextSpacing()) {
                         Text(headline)
                             .font(.system(size: headlineTextSize, weight: .bold))
                             .foregroundColor(.white)
                             .multilineTextAlignment(.center)
-                            .shadow(radius: 5)
+                            .shadow(radius: 10)
                         
                         if !subtext.isEmpty {
                             Text(subtext)
                                 .font(.system(size: subtextTextSize))
                                 .foregroundColor(.white.opacity(0.9))
                                 .multilineTextAlignment(.center)
-                                .shadow(radius: 3)
+                                .shadow(radius: 5)
                         }
                     }
                     .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 40)
                     .position(
                         x: geometry.size.width / 2,
-                        y: calculateTextVerticalPosition(in: geometry.size)
+                        y: calculateFullScreenTextVerticalPosition(in: geometry.size)
                     )
-                }
-            }
-        }
-    }
-    
-    private func calculateTextVerticalPosition(in size: CGSize) -> CGFloat {
-        let basePosition: CGFloat
-        
-        switch textVerticalPosition {
-        case .top:
-            basePosition = size.height * 0.25
-        case .center:
-            basePosition = size.height * 0.5
-        case .bottom:
-            basePosition = size.height * 0.75
-        }
-        
-        // Apply fine tuning (scale based on height)
-        let scaledFineTuning = textVerticalFineTuning * (height / 300)
-        return basePosition - scaledFineTuning
-    }
-    
-    private func calculateTextSpacing() -> CGFloat {
-        // Dynamic spacing based on text sizes and preview height
-        return (headlineTextSize + subtextTextSize) * 0.1 * (height / 300)
-    }
-}
-
-// MARK: - Full Screen Preview
-
-struct FullScreenPreviewView: View {
-    let backgroundImage: UIImage?
-    let logoImage: UIImage?
-    let headline: String
-    let subtext: String
-    let textVerticalPosition: KioskLayoutConstants.VerticalTextPosition
-    let textVerticalFineTuning: Double
-    let headlineTextSize: Double
-    let subtextTextSize: Double
-    @Binding var isPresented: Bool
-    
-    var body: some View {
-        ZStack {
-            // Full screen background
-            if let backgroundImage = backgroundImage {
-                Image(uiImage: backgroundImage)
-                    .resizable()
-                    .scaledToFill()
-                    .ignoresSafeArea()
-            } else {
-                // Default gradient background
-                LinearGradient(
-                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-            }
-            
-            // Dark overlay
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-            
-            // Content positioned exactly like the real HomeView
-            GeometryReader { geometry in
-                VStack(spacing: calculateFullScreenTextSpacing()) {
-                    Text(headline)
-                        .font(.system(size: headlineTextSize, weight: .bold))
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                        .shadow(radius: 10)
                     
-                    if !subtext.isEmpty {
-                        Text(subtext)
-                            .font(.system(size: subtextTextSize))
-                            .foregroundColor(.white.opacity(0.9))
-                            .multilineTextAlignment(.center)
-                            .shadow(radius: 5)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 40)
-                .position(
-                    x: geometry.size.width / 2,
-                    y: calculateFullScreenTextVerticalPosition(in: geometry.size)
-                )
-            }
-            
-            // Close button (top right)
-            VStack {
-                HStack {
-                    Spacer()
-                    
-                    Button(action: {
-                        isPresented = false
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                                .frame(width: 44, height: 44)
-                            
-                            Image(systemName: "xmark")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-                        }
-                    }
-                }
-                .padding(.top, 20)
-                .padding(.trailing, 20)
-                
-                Spacer()
-            }
-        }
-        .statusBarHidden()
-    }
-    
-    private func calculateFullScreenTextVerticalPosition(in size: CGSize) -> CGFloat {
-        let basePosition: CGFloat
-        
-        switch textVerticalPosition {
-        case .top:
-            basePosition = size.height * 0.25
-        case .center:
-            basePosition = size.height * 0.5
-        case .bottom:
-            basePosition = size.height * 0.75
-        }
-        
-        // Apply fine tuning at full scale
-        return basePosition - textVerticalFineTuning
-    }
-    
-    private func calculateFullScreenTextSpacing() -> CGFloat {
-        // Dynamic spacing based on actual text sizes
-        return (headlineTextSize + subtextTextSize) * 0.15
-    }
-}
-
-// MARK: - Collapsible Layout Section
-
-struct CollapsibleLayoutSection: View {
-    @Binding var isExpanded: Bool
-    @Binding var textVerticalPosition: KioskLayoutConstants.VerticalTextPosition
-    @Binding var textVerticalFineTuning: Double
-    @Binding var headlineTextSize: Double
-    @Binding var subtextTextSize: Double
-    @Binding var showSaveToast: Bool
-    
-    let hasChanges: Bool
-    let onSave: () -> Void
-    let onRevertToDefault: () -> Void
-    let backgroundImage: UIImage?
-    let headline: String
-    let subtext: String
-    
-    // Live preview states
-    @State private var isAdjustingPosition = false
-    @State private var isAdjustingHeadlineSize = false
-    @State private var isAdjustingSubtextSize = false
-    
-    // Store the values being adjusted for the preview
-    @State private var previewTextVerticalFineTuning: Double = 0.0
-    @State private var previewHeadlineTextSize: Double = 90.0
-    @State private var previewSubtextTextSize: Double = 30.0
-    
-    // Track which slider is being adjusted for positioning
-    @State private var activeSliderPosition: CGPoint = .zero
-    
-    // Computed property to check if settings are not default
-    private var isNotDefault: Bool {
-        return textVerticalPosition != .center ||
-               textVerticalFineTuning != 0.0 ||
-               headlineTextSize != KioskLayoutConstants.defaultHeadlineSize ||
-               subtextTextSize != KioskLayoutConstants.defaultSubtextSize
-    }
-    
-    var body: some View {
-        ZStack {
-            // Main settings card
-            VStack(alignment: .leading, spacing: 20) {
-                // Header with expand/collapse button
-                Button(action: {
-                    withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                        isExpanded.toggle()
-                    }
-                }) {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.blue.opacity(0.1))
-                                .frame(width: 32, height: 32)
-                            
-                            Image(systemName: "rectangle.and.pencil.and.ellipsis")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(.blue)
-                        }
-                        
-                        Text("Layout & Positioning")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-                        
+                    // FIXED: Zoom controls (bottom left) - Simple positioning
+                    VStack {
                         Spacer()
                         
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: isExpanded)
-                    }
-                    .padding(.vertical, 8)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                // Collapsible content
-                if isExpanded {
-                    VStack(spacing: 24) {
-                        // Vertical Position Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            SectionHeader(title: "Text Position", subtitle: "Choose where your text appears on screen")
+                        HStack {
+                            VStack(spacing: 8) {
+                                // Reset zoom button
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        currentZoom = 1.0
+                                        currentPan = .zero
+                                        backgroundImageZoom = 1.0
+                                        onZoomChange(1.0)
+                                        onPanChange(0.0, 0.0)
+                                    }
+                                }) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(.ultraThinMaterial)
+                                            .frame(width: 44, height: 44)
+                                        
+                                        Image(systemName: "arrow.clockwise")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                                
+                                // Zoom level indicator
+                                Text("\(Int(backgroundImageZoom * 100))%")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Capsule())
+                            }
+                            .padding(.leading, 16)
                             
-                            // Position presets
-                            VStack(spacing: 12) {
-                                ForEach(KioskLayoutConstants.VerticalTextPosition.allCases, id: \.self) { position in
-                                    PositionOptionCard(
-                                        position: position,
-                                        isSelected: textVerticalPosition == position,
-                                        onSelect: {
-                                            textVerticalPosition = position
-                                        }
-                                    )
+                            Spacer()
+                        }
+                        .padding(.bottom, 50)
+                    }
+                    
+                    // FIXED: Close button (top right) - Simple positioning
+                    VStack {
+                        HStack {
+                            Spacer()
+                            
+                            Button(action: {
+                                isPresented = false
+                            }) {
+                                ZStack {
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .frame(width: 44, height: 44)
+                                    
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(.white)
                                 }
                             }
+                            .padding(.trailing, 16)
+                        }
+                        .padding(.top, 50)
+                        
+                        Spacer()
+                    }
+                    
+                    // FIXED: Instructions overlay (top center) - Simple positioning
+                    VStack {
+                        HStack {
+                            Spacer()
                             
-                            // Fine-tuning slider with geometry reader
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Fine Adjustment")
-                                    .font(.subheadline)
+                            VStack(spacing: 4) {
+                                Text("Pinch to zoom • Drag to pan")
+                                    .font(.caption)
                                     .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Capsule())
+                                    .opacity(backgroundImage != nil ? 1.0 : 0.0)
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding(.top, 100)
+                        
+                        Spacer()
+                    }
+                }
+            }
+            .statusBarHidden()
+            .onAppear {
+                // Initialize from persistent state
+                currentZoom = CGFloat(backgroundImageZoom)
+                // Load pan from KioskStore if you have pan properties there
+            }
+        }
+        
+        private func calculateFullScreenTextVerticalPosition(in size: CGSize) -> CGFloat {
+            let basePosition: CGFloat
+            
+            switch textVerticalPosition {
+            case .top:
+                basePosition = size.height * 0.25
+            case .center:
+                basePosition = size.height * 0.5
+            case .bottom:
+                basePosition = size.height * 0.75
+            }
+            
+            return basePosition + textVerticalFineTuning
+        }
+        
+        private func calculateFullScreenTextSpacing() -> CGFloat {
+            return (headlineTextSize + subtextTextSize) * 0.15
+        }
+    }
+    
+    // MARK: - Collapsible Layout Section - FIXED
+    
+    struct CollapsibleLayoutSection: View {
+        @Binding var isExpanded: Bool
+        @Binding var textVerticalPosition: KioskLayoutConstants.VerticalTextPosition
+        @Binding var textVerticalFineTuning: Double
+        @Binding var headlineTextSize: Double
+        @Binding var subtextTextSize: Double
+        @Binding var showSaveToast: Bool
+        
+        let hasChanges: Bool
+        let onSave: () -> Void
+        let onRevertToDefault: () -> Void
+        let backgroundImage: UIImage?
+        let headline: String
+        let subtext: String
+        
+        // Live preview states
+        @State private var isAdjustingPosition = false
+        @State private var isAdjustingHeadlineSize = false
+        @State private var isAdjustingSubtextSize = false
+        
+        // Store the values being adjusted for the preview
+        @State private var previewTextVerticalFineTuning: Double = 0.0
+        @State private var previewHeadlineTextSize: Double = 90.0
+        @State private var previewSubtextTextSize: Double = 30.0
+        
+        // FIXED: Store slider frame for consistent positioning
+        @State private var positionSliderFrame: CGRect = .zero
+        @State private var headlineSliderFrame: CGRect = .zero
+        @State private var subtextSliderFrame: CGRect = .zero
+        
+        // Computed property to check if settings are not default
+        private var isNotDefault: Bool {
+            return textVerticalPosition != .center ||
+            textVerticalFineTuning != 0.0 ||
+            headlineTextSize != KioskLayoutConstants.defaultHeadlineSize ||
+            subtextTextSize != KioskLayoutConstants.defaultSubtextSize
+        }
+        
+        var body: some View {
+            ZStack {
+                // Main settings card
+                VStack(alignment: .leading, spacing: 20) {
+                    // Header with expand/collapse button
+                    Button(action: {
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                            isExpanded.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.blue.opacity(0.1))
+                                    .frame(width: 32, height: 32)
                                 
-                                GeometryReader { geometry in
+                                Image(systemName: "rectangle.and.pencil.and.ellipsis")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundStyle(.blue)
+                            }
+                            
+                            Text("Layout & Positioning")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.8), value: isExpanded)
+                        }
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    // Collapsible content
+                    if isExpanded {
+                        VStack(spacing: 24) {
+                            // Vertical Position Section
+                            VStack(alignment: .leading, spacing: 16) {
+                                SectionHeader(title: "Text Position", subtitle: "Choose where your text appears on screen")
+                                
+                                // Position presets
+                                VStack(spacing: 12) {
+                                    ForEach(KioskLayoutConstants.VerticalTextPosition.allCases, id: \.self) { position in
+                                        PositionOptionCard(
+                                            position: position,
+                                            isSelected: textVerticalPosition == position,
+                                            onSelect: {
+                                                textVerticalPosition = position
+                                            }
+                                        )
+                                    }
+                                }
+                                
+                                // FIXED: Fine-tuning slider with proper frame tracking
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Fine Adjustment")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                    
                                     HStack {
                                         Text("Higher")
                                             .font(.caption)
@@ -696,11 +848,6 @@ struct CollapsibleLayoutSection: View {
                                                 isAdjustingPosition = editing
                                                 if editing {
                                                     previewTextVerticalFineTuning = textVerticalFineTuning
-                                                    // Calculate slider position
-                                                    let sliderProgress = (textVerticalFineTuning + 50) / 100
-                                                    let sliderX = geometry.frame(in: .global).minX + (geometry.size.width * sliderProgress)
-                                                    let sliderY = geometry.frame(in: .global).midY
-                                                    activeSliderPosition = CGPoint(x: sliderX, y: sliderY)
                                                 }
                                             }
                                         )
@@ -709,42 +856,51 @@ struct CollapsibleLayoutSection: View {
                                                 previewTextVerticalFineTuning = newValue
                                             }
                                         }
+                                        .background(
+                                            // FIXED: Capture slider frame reliably
+                                            GeometryReader { geometry in
+                                                Color.clear
+                                                    .onAppear {
+                                                        positionSliderFrame = geometry.frame(in: .global)
+                                                    }
+                                                    .onChange(of: geometry.frame(in: .global)) { _, newFrame in
+                                                        positionSliderFrame = newFrame
+                                                    }
+                                            }
+                                        )
                                         
                                         Text("Lower")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
-                                }
-                                .frame(height: 44)
-                                
-                                Text("Current: \(Int(textVerticalFineTuning)) points")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        
-                        Divider()
-                        
-                        // Text Size Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            SectionHeader(title: "Text Size", subtitle: "Adjust the size of your headline and supporting text")
-                            
-                            VStack(spacing: 16) {
-                                // Headline size with geometry reader
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text("Headline Size")
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                        
-                                        Spacer()
-                                        
-                                        Text("\(Int(headlineTextSize))pt")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
                                     
-                                    GeometryReader { geometry in
+                                    Text("Current: \(Int(textVerticalFineTuning)) points")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            
+                            Divider()
+                            
+                            // Text Size Section
+                            VStack(alignment: .leading, spacing: 16) {
+                                SectionHeader(title: "Text Size", subtitle: "Adjust the size of your headline and supporting text")
+                                
+                                VStack(spacing: 16) {
+                                    // FIXED: Headline size with proper frame tracking
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("Headline Size")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                            
+                                            Spacer()
+                                            
+                                            Text("\(Int(headlineTextSize))pt")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        
                                         Slider(
                                             value: $headlineTextSize,
                                             in: KioskLayoutConstants.headlineSizeRange,
@@ -753,12 +909,6 @@ struct CollapsibleLayoutSection: View {
                                                 isAdjustingHeadlineSize = editing
                                                 if editing {
                                                     previewHeadlineTextSize = headlineTextSize
-                                                    // Calculate slider position
-                                                    let range = KioskLayoutConstants.headlineSizeRange.upperBound - KioskLayoutConstants.headlineSizeRange.lowerBound
-                                                    let sliderProgress = (headlineTextSize - KioskLayoutConstants.headlineSizeRange.lowerBound) / range
-                                                    let sliderX = geometry.frame(in: .global).minX + (geometry.size.width * sliderProgress)
-                                                    let sliderY = geometry.frame(in: .global).midY
-                                                    activeSliderPosition = CGPoint(x: sliderX, y: sliderY)
                                                 }
                                             }
                                         )
@@ -767,25 +917,34 @@ struct CollapsibleLayoutSection: View {
                                                 previewHeadlineTextSize = newValue
                                             }
                                         }
-                                    }
-                                    .frame(height: 44)
-                                }
-                                
-                                // Subtext size with geometry reader
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text("Supporting Text Size")
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                        
-                                        Spacer()
-                                        
-                                        Text("\(Int(subtextTextSize))pt")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        .background(
+                                            // FIXED: Capture slider frame reliably
+                                            GeometryReader { geometry in
+                                                Color.clear
+                                                    .onAppear {
+                                                        headlineSliderFrame = geometry.frame(in: .global)
+                                                    }
+                                                    .onChange(of: geometry.frame(in: .global)) { _, newFrame in
+                                                        headlineSliderFrame = newFrame
+                                                    }
+                                            }
+                                        )
                                     }
                                     
-                                    GeometryReader { geometry in
+                                    // FIXED: Subtext size with proper frame tracking
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("Supporting Text Size")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                            
+                                            Spacer()
+                                            
+                                            Text("\(Int(subtextTextSize))pt")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        
                                         Slider(
                                             value: $subtextTextSize,
                                             in: KioskLayoutConstants.subtextSizeRange,
@@ -794,12 +953,6 @@ struct CollapsibleLayoutSection: View {
                                                 isAdjustingSubtextSize = editing
                                                 if editing {
                                                     previewSubtextTextSize = subtextTextSize
-                                                    // Calculate slider position
-                                                    let range = KioskLayoutConstants.subtextSizeRange.upperBound - KioskLayoutConstants.subtextSizeRange.lowerBound
-                                                    let sliderProgress = (subtextTextSize - KioskLayoutConstants.subtextSizeRange.lowerBound) / range
-                                                    let sliderX = geometry.frame(in: .global).minX + (geometry.size.width * sliderProgress)
-                                                    let sliderY = geometry.frame(in: .global).midY
-                                                    activeSliderPosition = CGPoint(x: sliderX, y: sliderY)
                                                 }
                                             }
                                         )
@@ -808,149 +961,192 @@ struct CollapsibleLayoutSection: View {
                                                 previewSubtextTextSize = newValue
                                             }
                                         }
+                                        .background(
+                                            // FIXED: Capture slider frame reliably
+                                            GeometryReader { geometry in
+                                                Color.clear
+                                                    .onAppear {
+                                                        subtextSliderFrame = geometry.frame(in: .global)
+                                                    }
+                                                    .onChange(of: geometry.frame(in: .global)) { _, newFrame in
+                                                        subtextSliderFrame = newFrame
+                                                    }
+                                            }
+                                        )
                                     }
-                                    .frame(height: 44)
                                 }
                             }
-                        }
-                        
-                        Divider()
-                        
-                        // Action buttons
-                        HStack(spacing: 12) {
-                            Button("Revert to Default") {
-                                onRevertToDefault()
-                            }
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(isNotDefault ? Color.blue : Color(.systemGray4))
-                            .foregroundStyle(isNotDefault ? .white : .secondary)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .animation(.easeOut(duration: 0.1), value: isNotDefault)
-                            .disabled(!isNotDefault)
                             
-                            Button("Save Layout") {
-                                onSave()
+                            Divider()
+                            
+                            // Action buttons
+                            HStack(spacing: 12) {
+                                Button("Revert to Default") {
+                                    onRevertToDefault()
+                                }
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(isNotDefault ? Color.blue : Color(.systemGray4))
+                                .foregroundStyle(isNotDefault ? .white : .secondary)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .animation(.easeOut(duration: 0.1), value: isNotDefault)
+                                .disabled(!isNotDefault)
+                                
+                                Button("Save Layout") {
+                                    onSave()
+                                }
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(hasChanges ? Color.blue : Color(.systemGray4))
+                                .foregroundStyle(hasChanges ? .white : .secondary)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .animation(.easeOut(duration: 0.1), value: hasChanges)
+                                .disabled(!hasChanges)
                             }
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(hasChanges ? Color.blue : Color(.systemGray4))
-                            .foregroundStyle(hasChanges ? .white : .secondary)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .animation(.easeOut(duration: 0.1), value: hasChanges)
-                            .disabled(!hasChanges)
                         }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+                .padding(24)
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                
+                // FIXED: Live preview overlay positioned consistently above slider
+                if isAdjustingPosition || isAdjustingHeadlineSize || isAdjustingSubtextSize {
+                    LivePreviewOverlay(
+                        backgroundImage: backgroundImage,
+                        headline: headline,
+                        subtext: subtext,
+                        textVerticalPosition: textVerticalPosition,
+                        textVerticalFineTuning: isAdjustingPosition ? previewTextVerticalFineTuning : textVerticalFineTuning,
+                        headlineTextSize: isAdjustingHeadlineSize ? previewHeadlineTextSize : headlineTextSize,
+                        subtextTextSize: isAdjustingSubtextSize ? previewSubtextTextSize : subtextTextSize
+                    )
+                    .position(
+                        x: getActiveSliderCenter().x,
+                        y: getActiveSliderCenter().y - 100 // Increased from 80 to 100 for larger preview
+                    )
+                    .transition(.opacity.combined(with: .scale))
+                    .animation(.easeInOut(duration: 0.2), value: isAdjustingPosition || isAdjustingHeadlineSize || isAdjustingSubtextSize)
                 }
             }
-            .padding(24)
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        }
+        
+        // FIXED: Get the center position of the currently active slider
+        private func getActiveSliderCenter() -> CGPoint {
+            let activeFrame: CGRect
             
-            // Live preview overlay positioned near active slider
-            if isAdjustingPosition || isAdjustingHeadlineSize || isAdjustingSubtextSize {
-                LivePreviewOverlay(
-                    backgroundImage: backgroundImage,
-                    headline: headline,
-                    subtext: subtext,
-                    textVerticalPosition: textVerticalPosition,
-                    textVerticalFineTuning: isAdjustingPosition ? previewTextVerticalFineTuning : textVerticalFineTuning,
-                    headlineTextSize: isAdjustingHeadlineSize ? previewHeadlineTextSize : headlineTextSize,
-                    subtextTextSize: isAdjustingSubtextSize ? previewSubtextTextSize : subtextTextSize
-                )
-                .position(
-                    x: min(max(100, activeSliderPosition.x), UIScreen.main.bounds.width - 100),
-                    y: activeSliderPosition.y - 60
-                )
-                .transition(.opacity.combined(with: .scale))
-                .animation(.easeInOut(duration: 0.2), value: isAdjustingPosition || isAdjustingHeadlineSize || isAdjustingSubtextSize)
+            if isAdjustingPosition {
+                activeFrame = positionSliderFrame
+            } else if isAdjustingHeadlineSize {
+                activeFrame = headlineSliderFrame
+            } else if isAdjustingSubtextSize {
+                activeFrame = subtextSliderFrame
+            } else {
+                activeFrame = .zero
             }
+            
+            return CGPoint(
+                x: activeFrame.midX,
+                y: activeFrame.midY
+            )
         }
     }
-}
-// MARK: - Live Preview Overlay
-
-struct LivePreviewOverlay: View {
-    let backgroundImage: UIImage?
-    let headline: String
-    let subtext: String
-    let textVerticalPosition: KioskLayoutConstants.VerticalTextPosition
-    let textVerticalFineTuning: Double
-    let headlineTextSize: Double
-    let subtextTextSize: Double
     
-    var body: some View {
-        ZStack {
-            // Background
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(.secondarySystemBackground))
-                .frame(width: 120, height: 80)
-            
-            // Background image if available
-            if let backgroundImage = backgroundImage {
-                Image(uiImage: backgroundImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 120, height: 80)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+    // MARK: - Live Preview Overlay - FIXED & ENLARGED
+    
+    struct LivePreviewOverlay: View {
+        let backgroundImage: UIImage?
+        let headline: String
+        let subtext: String
+        let textVerticalPosition: KioskLayoutConstants.VerticalTextPosition
+        let textVerticalFineTuning: Double
+        let headlineTextSize: Double
+        let subtextTextSize: Double
+        
+        var body: some View {
+            ZStack {
+                // Background - Made larger for better visibility
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.secondarySystemBackground))
+                    .frame(width: 180, height: 120)
                 
-                // Dark overlay
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.black.opacity(0.4))
-                    .frame(width: 120, height: 80)
-            }
-            
-            // Text overlay
-            VStack(spacing: 2) {
-                Text(headline)
-                    .font(.system(size: max(6, headlineTextSize * 0.12), weight: .bold))
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(1)
-                    .shadow(radius: 1)
+                // Background image if available
+                if let backgroundImage = backgroundImage {
+                    Image(uiImage: backgroundImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 180, height: 120)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    
+                    // Dark overlay
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.black.opacity(0.4))
+                        .frame(width: 180, height: 120)
+                }
                 
-                if !subtext.isEmpty {
-                    Text(subtext)
-                        .font(.system(size: max(4, subtextTextSize * 0.12)))
-                        .foregroundColor(.white.opacity(0.9))
+                // Text overlay - Larger text for better readability
+                VStack(spacing: 4) {
+                    Text(headline)
+                        .font(.system(size: max(8, headlineTextSize * 0.18), weight: .bold))
+                        .foregroundColor(.white)
                         .multilineTextAlignment(.center)
-                        .lineLimit(1)
-                        .shadow(radius: 1)
+                        .lineLimit(2)
+                        .shadow(radius: 2)
+                    
+                    if !subtext.isEmpty {
+                        Text(subtext)
+                            .font(.system(size: max(6, subtextTextSize * 0.18)))
+                            .foregroundColor(.white.opacity(0.9))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .shadow(radius: 1)
+                    }
                 }
+                .frame(width: 160, height: 100)
+                .offset(y: calculateTextOffset())
             }
-            .frame(width: 100, height: 60)
-            .offset(y: calculateTextOffset())
+            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         }
-        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+        
+        // FIXED: Consistent text offset calculation with larger range
+        private func calculateTextOffset() -> CGFloat {
+            let range: CGFloat = 25 // Increased movement range for larger preview
+            
+            let baseOffset: CGFloat
+            switch textVerticalPosition {
+            case .top:
+                baseOffset = -range * 0.7
+            case .center:
+                baseOffset = 0
+            case .bottom:
+                baseOffset = range * 0.7
+            }
+            
+            // FIXED: Apply fine tuning correctly (+ not -)
+            let fineTuningOffset = (textVerticalFineTuning * 0.3)
+            
+            return baseOffset + fineTuningOffset
+        }
     }
     
-    private func calculateTextOffset() -> CGFloat {
-        let range: CGFloat = 15 // Max movement range up/down
-        
-        let baseOffset: CGFloat
-        switch textVerticalPosition {
-        case .top:
-            baseOffset = -range * 0.7
-        case .center:
-            baseOffset = 0
-        case .bottom:
-            baseOffset = range * 0.7
+   
+    
+ 
+    
+    struct HomePageSettingsView_Previews: PreviewProvider {
+        static var previews: some View {
+            HomePageSettingsView()
+                .environmentObject(KioskStore())
         }
-        
-        // Apply fine tuning (scaled down) - FIXED: should be positive to match actual behavior
-        let fineTuningOffset = (textVerticalFineTuning * 0.2)
-        
-        return baseOffset + fineTuningOffset
     }
 }
-
 // MARK: - Supporting Views
 
 struct SettingsCard<Content: View>: View {
@@ -1120,7 +1316,6 @@ struct ToastNotification: View {
         .padding(.top, 60)
     }
 }
-
 // Keep existing ImagePicker implementation
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var selectedImage: UIImage?
@@ -1162,12 +1357,5 @@ struct ImagePicker: UIViewControllerRepresentable {
                 }
             }
         }
-    }
-}
-
-struct HomePageSettingsView_Previews: PreviewProvider {
-    static var previews: some View {
-        HomePageSettingsView()
-            .environmentObject(KioskStore())
     }
 }
