@@ -373,6 +373,7 @@ struct DonationSelectionView: View {
                         .disableAutocorrection(true)
                         .onChange(of: emailAddress) { _, newValue in
                             validateEmail(newValue)
+                            resetTimeout() 
                         }
                     
                     if !emailAddress.isEmpty && !isEmailValid {
