@@ -23,7 +23,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         print("📱 AppDelegate received URL: \(url)")
 
         // Handle Square OAuth callback via custom URL scheme
-        if url.scheme == "charitypad" {
+        if url.scheme == "shulpad" {
             print("🔗 Received callback with URL: \(url)")
             
             // Check if this is our oauth-complete callback

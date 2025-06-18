@@ -71,7 +71,7 @@ struct SafariView: UIViewControllerRepresentable {
             print("Safari redirected to: \(URL)")
             
             // If the URL is our custom scheme, handle it here
-            if URL.scheme == "charitypad" {
+            if URL.scheme == "shulpad" {
                 print("Detected redirect to our custom URL scheme: \(URL)")
                 
                 // Extract success parameter if available

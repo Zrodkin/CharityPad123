@@ -12,26 +12,26 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		8D7FDAFD2DF2BF7E006824F7 /* CharityPad123.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CharityPad123.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8D7FDAFD2DF2BF7E006824F7 /* ShulPad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShulPad.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		8D5DA2ED2DFAA15E00B1934B /* Exceptions for "CharityPad123" folder in "CharityPad123" target */ = {
+		8D5DA2ED2DFAA15E00B1934B /* Exceptions for "ShulPad" folder in "ShulPad" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 8D8F84282DE654A1002D8A06 /* CharityPad123 */;
+			target = 8D8F84282DE654A1002D8A06 /* ShulPad */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		8D8F842B2DE654A1002D8A06 /* CharityPad123 */ = {
+		8D8F842B2DE654A1002D8A06 /* ShulPad */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				8D5DA2ED2DFAA15E00B1934B /* Exceptions for "CharityPad123" folder in "CharityPad123" target */,
+				8D5DA2ED2DFAA15E00B1934B /* Exceptions for "ShulPad" folder in "ShulPad" target */,
 			);
-			path = CharityPad123;
+			path = ShulPad;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -52,17 +52,17 @@
 		8D8F84202DE654A1002D8A06 = {
 			isa = PBXGroup;
 			children = (
-				8D8F842B2DE654A1002D8A06 /* CharityPad123 */,
-				8D7FDAFD2DF2BF7E006824F7 /* CharityPad123.app */,
+				8D8F842B2DE654A1002D8A06 /* ShulPad */,
+				8D7FDAFD2DF2BF7E006824F7 /* ShulPad.app */,
 			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		8D8F84282DE654A1002D8A06 /* CharityPad123 */ = {
+		8D8F84282DE654A1002D8A06 /* ShulPad */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 8D8F843A2DE654A2002D8A06 /* Build configuration list for PBXNativeTarget "CharityPad123" */;
+			buildConfigurationList = 8D8F843A2DE654A2002D8A06 /* Build configuration list for PBXNativeTarget "ShulPad" */;
 			buildPhases = (
 				8D8F84252DE654A1002D8A06 /* Sources */,
 				8D8F84262DE654A1002D8A06 /* Frameworks */,
@@ -74,15 +74,15 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				8D8F842B2DE654A1002D8A06 /* CharityPad123 */,
+				8D8F842B2DE654A1002D8A06 /* ShulPad */,
 			);
-			name = CharityPad123;
+			name = ShulPad;
 			packageProductDependencies = (
 				8D8F843E2DE6560D002D8A06 /* MockReaderUI */,
 				8D8F84402DE6560D002D8A06 /* SquareMobilePaymentsSDK */,
 			);
 			productName = CharityPad123;
-			productReference = 8D7FDAFD2DF2BF7E006824F7 /* CharityPad123.app */;
+			productReference = 8D7FDAFD2DF2BF7E006824F7 /* ShulPad.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -100,7 +100,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 8D8F84242DE654A1002D8A06 /* Build configuration list for PBXProject "CharityPad123" */;
+			buildConfigurationList = 8D8F84242DE654A1002D8A06 /* Build configuration list for PBXProject "ShulPad" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -117,7 +117,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				8D8F84282DE654A1002D8A06 /* CharityPad123 */,
+				8D8F84282DE654A1002D8A06 /* ShulPad */,
 			);
 		};
 /* End PBXProject section */
@@ -196,6 +196,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = "";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = CM2B5TXHWB;
@@ -221,6 +222,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = ShulPad;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -259,6 +261,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = "";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = CM2B5TXHWB;
@@ -277,6 +280,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = ShulPad;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
@@ -286,7 +290,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = CharityPad123/CharityPad123.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ShulPad/ShulPad.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
@@ -295,7 +299,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CharityPad123/Info.plist;
+				INFOPLIST_FILE = ShulPad/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ShulPad;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -313,8 +317,8 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.2;
 				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.rebbe.CharityPad123;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.shulpad.app;
+				PRODUCT_NAME = ShulPad;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -332,7 +336,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = CharityPad123/CharityPad123.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ShulPad/ShulPad.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
@@ -341,7 +345,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CharityPad123/Info.plist;
+				INFOPLIST_FILE = ShulPad/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ShulPad;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -359,8 +363,8 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.2;
 				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.rebbe.CharityPad123;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.shulpad.app;
+				PRODUCT_NAME = ShulPad;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -376,7 +380,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		8D8F84242DE654A1002D8A06 /* Build configuration list for PBXProject "CharityPad123" */ = {
+		8D8F84242DE654A1002D8A06 /* Build configuration list for PBXProject "ShulPad" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				8D8F84382DE654A2002D8A06 /* Debug */,
@@ -385,7 +389,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		8D8F843A2DE654A2002D8A06 /* Build configuration list for PBXNativeTarget "CharityPad123" */ = {
+		8D8F843A2DE654A2002D8A06 /* Build configuration list for PBXNativeTarget "ShulPad" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				8D8F843B2DE654A2002D8A06 /* Debug */,

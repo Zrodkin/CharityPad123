@@ -4,6 +4,6 @@
 <dict>
     <!-- Background Modes (matches your Info.plist) -->
     <key>com.apple.developer.ubiquity-kvstore-identifier</key>
-    <string>$(TeamIdentifierPrefix)org.rebbe.CharityPad123</string>
+    <string>$(TeamIdentifierPrefix)com.shulpad.app</string>
 </dict>
 </plist>

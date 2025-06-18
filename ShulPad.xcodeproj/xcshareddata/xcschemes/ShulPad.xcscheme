@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "8D8F84282DE654A1002D8A06"
-               BuildableName = "CharityPad123.app"
-               BlueprintName = "CharityPad123"
-               ReferencedContainer = "container:CharityPad123.xcodeproj">
+               BuildableName = "ShulPad.app"
+               BlueprintName = "ShulPad"
+               ReferencedContainer = "container:ShulPad.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -45,9 +45,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8D8F84282DE654A1002D8A06"
-            BuildableName = "CharityPad123.app"
-            BlueprintName = "CharityPad123"
-            ReferencedContainer = "container:CharityPad123.xcodeproj">
+            BuildableName = "ShulPad.app"
+            BlueprintName = "ShulPad"
+            ReferencedContainer = "container:ShulPad.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -62,9 +62,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8D8F84282DE654A1002D8A06"
-            BuildableName = "CharityPad123.app"
-            BlueprintName = "CharityPad123"
-            ReferencedContainer = "container:CharityPad123.xcodeproj">
+            BuildableName = "ShulPad.app"
+            BlueprintName = "ShulPad"
+            ReferencedContainer = "container:ShulPad.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
