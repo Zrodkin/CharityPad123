@@ -20,7 +20,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.shulpad.app</string>
+            <string>org.rebbe.CharityPad123</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>shulpad</string>
