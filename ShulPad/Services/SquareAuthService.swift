@@ -13,6 +13,9 @@ class SquareAuthService: ObservableObject {
     @Published var tokenStatus: TokenValidationStatus = .unknown
     @Published var lastTokenCheck: Date? = nil
     
+    private var isAuthorizationInProgress = false
+    private var authorizationStartTime: Date?
+    
     
     enum TokenValidationStatus {
         case unknown
@@ -300,10 +303,30 @@ class SquareAuthService: ObservableObject {
     // MARK: - OAuth Flow Methods
     
     func startOAuthFlow() {
+        // Prevent duplicate authorization attempts
+        guard !isAuthorizationInProgress else {
+            print("⚠️ OAuth authorization already in progress, skipping duplicate request")
+            return
+        }
+        
+        // Check if a recent authorization attempt is still active
+        if let startTime = authorizationStartTime,
+           Date().timeIntervalSince(startTime) < 300 { // 5 minutes timeout
+            print("⚠️ Recent authorization attempt still active, skipping")
+            return
+        }
+        
+        // Mark authorization as in progress
+        isAuthorizationInProgress = true
+        authorizationStartTime = Date()
+        
         isAuthenticating = true
         authError = nil
         
-        print("Starting OAuth flow")
+        print("🔄 Starting OAuth flow with ASWebAuthenticationSession")
+        
+        // Note: Actual URL opening is now handled by ASWebAuthenticationSession
+        // in the AuthenticationSessionManager, not here
         
         SquareConfig.generateOAuthURL { [weak self] url, error, state in
             DispatchQueue.main.async {
@@ -313,12 +336,14 @@ class SquareAuthService: ObservableObject {
                     print("Failed to generate authorization URL: \(error.localizedDescription)")
                     self.authError = "Failed to generate authorization URL: \(error.localizedDescription)"
                     self.isAuthenticating = false
+                    self.resetAuthorizationState()
                     return
                 }
                 
                 guard let url = url else {
                     self.authError = "Failed to generate authorization URL: No URL returned"
                     self.isAuthenticating = false
+                    self.resetAuthorizationState()
                     return
                 }
                 
@@ -331,15 +356,16 @@ class SquareAuthService: ObservableObject {
                 }
                 
                 print("Starting OAuth flow with URL: \(url)")
-                self.openAuthURL(url)
+                // Note: URL opening will be handled by ASWebAuthenticationSession
                 
-                // Start polling after opening the URL only if we have a state
+                // Start polling after generating URL only if we have a state
                 if self.pendingAuthState != nil {
                     self.startPollingForAuthStatus()
                 } else {
                     print("ERROR: Cannot start polling without pendingAuthState")
                     self.authError = "Authorization failed: No state parameter"
                     self.isAuthenticating = false
+                    self.resetAuthorizationState()
                 }
             }
         }
@@ -473,35 +499,54 @@ class SquareAuthService: ObservableObject {
     }
     
     func handleOAuthCallback(url: URL) {
-        print("Processing OAuth callback: \(url)")
+        print("📱 Processing OAuth callback from ASWebAuthenticationSession: \(url)")
         
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems else {
             authError = "Invalid callback URL structure"
             isAuthenticating = false
-            print("Error: Invalid callback URL structure")
+            resetAuthorizationState()
+            print("❌ Error: Invalid callback URL structure")
             return
         }
         
         // Check for success parameter from our backend
         if let success = queryItems.first(where: { $0.name == "success" })?.value,
-           success == "true",
-           let merchantId = queryItems.first(where: { $0.name == "merchant_id" })?.value {
+           success == "true" {
             
-            print("Received successful callback with merchant ID: \(merchantId)")
+            print("✅ Received successful callback")
             
-            // Store merchant ID immediately
-            self.merchantId = merchantId
+            // Extract additional parameters
+            if let merchantId = queryItems.first(where: { $0.name == "merchant_id" })?.value {
+                print("📝 Merchant ID: \(merchantId)")
+                self.merchantId = merchantId
+            }
             
-            // Start polling for authentication status
-            startPollingForAuthStatus(merchantId: merchantId)
+            if let locationId = queryItems.first(where: { $0.name == "location_id" })?.value {
+                print("📍 Location ID: \(locationId)")
+                self.locationId = locationId
+            }
+            
+            // Reset authorization state since we got a successful callback
+            resetAuthorizationState()
+            
+            // Start polling for complete authentication status
+            startPollingForAuthStatus()
+            
         } else if let error = queryItems.first(where: { $0.name == "error" })?.value {
             authError = "Authorization failed: \(error)"
             isAuthenticating = false
-            print("Square OAuth Error: \(error)")
+            resetAuthorizationState()
+            print("❌ Square OAuth Error: \(error)")
         } else {
-            // If we don't have a success parameter, start polling anyway
-            print("Callback received without explicit success parameter, starting polling")
+            // Parse callback URL parameters and start polling
+            print("⏳ Callback received, parsing parameters and starting polling")
+            
+            // Extract any available parameters
+            for item in queryItems {
+                print("📋 Callback parameter: \(item.name) = \(item.value ?? "nil")")
+            }
+            
             startPollingForAuthStatus()
         }
     }
@@ -855,6 +900,8 @@ class SquareAuthService: ObservableObject {
         isExplicitlyLoggingOut = true
         logoutInProgress = true
         
+        resetAuthorizationState()
+        
         // Clear all token-related values
         accessToken = nil
         refreshToken = nil
@@ -888,6 +935,13 @@ class SquareAuthService: ObservableObject {
         logoutInProgress = false
     }
     
+    // 🔧 NEW: Reset authorization state method
+    private func resetAuthorizationState() {
+        isAuthorizationInProgress = false
+        authorizationStartTime = nil
+        print("🔄 Authorization state reset")
+    }
+    
     
     // MARK: - Helper Methods
     
@@ -904,9 +958,9 @@ class SquareAuthService: ObservableObject {
     }
     
     private func openAuthURL(_ url: URL) {
-        // Don't do anything here - we're now handling opening the URL in SquareAuthorizationView
+        // This method is no longer used with ASWebAuthenticationSession
+        // The URL opening is handled directly by AuthenticationSessionManager
         print("Auth URL generated: \(url)")
-        // The actual browser will be shown by the sheet in SquareAuthorizationView
     }
     
     private func refreshAccessToken(refreshToken: String) {

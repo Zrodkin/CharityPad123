@@ -39,29 +39,66 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        // Handle URL scheme callbacks (e.g., for Square OAuth)
-        if let url = URLContexts.first?.url, url.scheme == "shulpad" {
-            print("SceneDelegate received URL: \(url)")
+        guard let url = URLContexts.first?.url else {
+            print("❌ No URL in openURLContexts")
+            return
+        }
+        
+        print("📱 SceneDelegate received URL: \(url.absoluteString)")
+        
+        // Only handle our custom scheme
+        guard url.scheme == "shulpad" else {
+            print("⚠️ Ignoring URL with scheme: \(url.scheme ?? "nil")")
+            return
+        }
+        
+        // Check if this is the oauth-complete callback
+        if url.host == "oauth-complete" {
+            print("✅ Processing oauth-complete callback")
             
-            // Check if this is the oauth-complete callback
-            if url.host == "oauth-complete" {
-                // Extract success parameter
-                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                let success = components?.queryItems?.first(where: { $0.name == "success" })?.value == "true"
-                let error = components?.queryItems?.first(where: { $0.name == "error" })?.value
-                
-                // Post notification with success/error info
+            // Parse all URL parameters
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let queryItems = components?.queryItems ?? []
+            
+            // Extract parameters
+            let success = queryItems.first(where: { $0.name == "success" })?.value == "true"
+            let error = queryItems.first(where: { $0.name == "error" })?.value
+            let merchantId = queryItems.first(where: { $0.name == "merchant_id" })?.value
+            let locationId = queryItems.first(where: { $0.name == "location_id" })?.value
+            let locationName = queryItems.first(where: { $0.name == "location_name" })?.value
+            
+            // Debug logging
+            print("📊 OAuth Parameters:")
+            print("  - Success: \(success)")
+            print("  - Error: \(error ?? "none")")
+            print("  - Merchant ID: \(merchantId ?? "none")")
+            print("  - Location ID: \(locationId ?? "none")")
+            print("  - Location Name: \(locationName ?? "none")")
+            
+            // Build notification userInfo
+            var userInfo: [String: Any] = ["success": success]
+            if let error = error { userInfo["error"] = error }
+            if let merchantId = merchantId { userInfo["merchant_id"] = merchantId }
+            if let locationId = locationId { userInfo["location_id"] = locationId }
+            if let locationName = locationName { userInfo["location_name"] = locationName }
+            
+            // Post notification to app
+            DispatchQueue.main.async {
                 NotificationCenter.default.post(
                     name: .squareOAuthCallback,
-                    object: nil,
-                    userInfo: ["success": success, "error": error as Any]
+                    object: url,
+                    userInfo: userInfo
                 )
-                
-                print("OAuth flow completed with success: \(success)")
-            } else {
-                // For other URLs, just post the notification with the URL
-                NotificationCenter.default.post(name: .squareOAuthCallback, object: url)
+                print("✅ Posted squareOAuthCallback notification with userInfo: \(userInfo)")
             }
+        } else {
+            print("⚠️ Unhandled shulpad URL host: \(url.host ?? "nil")")
+            
+            // For other URLs, just post the notification with the URL
+            NotificationCenter.default.post(
+                name: .squareOAuthCallback,
+                object: url
+            )
         }
     }
 }

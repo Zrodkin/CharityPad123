@@ -1,14 +1,11 @@
 import SwiftUI
 import SafariServices
+import AuthenticationServices
 
 struct SquareAuthorizationView: View {
     @EnvironmentObject private var squareAuthService: SquareAuthService
-    @State private var showingSafari = false
-    @State private var authURL: URL? = nil
-    @State private var isPolling = false
-    @State private var pollingTimer: Timer? = nil
-    @State private var safariDismissed = false
-    @State private var notificationObserver: NSObjectProtocol? = nil
+    @StateObject private var authSessionManager = AuthenticationSessionManager()
+    @State private var authURL: URL?
     @Environment(\.presentationMode) var presentationMode
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     
@@ -21,21 +18,7 @@ struct SquareAuthorizationView: View {
                 .frame(height: 60)
                 .padding(.top, 40)
             
-            if safariDismissed {
-                // Show checking status view after Safari is closed
-                VStack(spacing: 16) {
-                    Text("Checking connection status...")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    ProgressView()
-                        .padding()
-                    
-                    Text("Please wait while we verify your Square connection.")
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-            } else if squareAuthService.isAuthenticated {
+            if squareAuthService.isAuthenticated {
                 // Show success view
                 VStack(spacing: 16) {
                     Image(systemName: "checkmark.circle.fill")
@@ -51,15 +34,12 @@ struct SquareAuthorizationView: View {
                         .foregroundColor(.gray)
                 }
                 .onAppear {
-                    // Set hasCompletedOnboarding to true
                     hasCompletedOnboarding = true
-                    
-                    // Auto-dismiss after a brief delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
-            } else if let error = squareAuthService.authError {
+            } else if let error = authSessionManager.authError ?? squareAuthService.authError {
                 // Show error view
                 VStack(spacing: 16) {
                     Image(systemName: "xmark.circle.fill")
@@ -77,8 +57,8 @@ struct SquareAuthorizationView: View {
                         .padding()
                     
                     Button(action: {
+                        authSessionManager.authError = nil
                         squareAuthService.authError = nil
-                        safariDismissed = false
                         startAuth()
                     }) {
                         Text("Try Again")
@@ -91,7 +71,7 @@ struct SquareAuthorizationView: View {
                     }
                     .padding(.horizontal)
                 }
-            } else if squareAuthService.isAuthenticating || showingSafari {
+            } else if authSessionManager.isAuthenticating || squareAuthService.isAuthenticating {
                 // Show connecting view
                 VStack(spacing: 16) {
                     Text("Connecting to Square")
@@ -101,8 +81,16 @@ struct SquareAuthorizationView: View {
                     ProgressView()
                         .padding()
                     
-                    Text(isPolling ? "Waiting for authorization..." : "Opening Square authorization page...")
+                    Text("Please complete the authorization in the browser...")
                         .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                    
+                    Button("Cancel") {
+                        authSessionManager.cancelAuthentication()
+                        squareAuthService.isAuthenticating = false
+                    }
+                    .foregroundColor(.red)
+                    .padding(.top)
                 }
             } else {
                 // Show initial connect view
@@ -111,7 +99,7 @@ struct SquareAuthorizationView: View {
                         .font(.title2)
                         .fontWeight(.bold)
                     
-                    Text("CharityPad needs to connect to your Square account to process payments.")
+                    Text("ShulPad needs to connect to your Square account to process payments.")
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                     
@@ -139,80 +127,19 @@ struct SquareAuthorizationView: View {
         }
         .padding()
         .onAppear {
-            // Check if we're already authenticated when the view appears
+            // Check if already authenticated
             if squareAuthService.isAuthenticated {
-                print("Already authenticated, setting hasCompletedOnboarding and dismissing")
+                print("Already authenticated, completing onboarding")
                 hasCompletedOnboarding = true
-                
-                // Auto-dismiss if already authenticated
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.presentationMode.wrappedValue.dismiss()
-                }
-            }
-            
-            // Set up notification observer for callbacks
-            notificationObserver = NotificationCenter.default.addObserver(
-                forName: .squareOAuthCallback,
-                object: nil,
-                queue: .main
-            ) { notification in
-                print("Received OAuth callback notification")
-                
-                // Handle the OAuth callback
-                handleOAuthCallback(notification)
-                
-                // Close the Safari view if it's open
-                if self.showingSafari {
-                    self.showingSafari = false
-                    self.safariDismissed = true
+                    presentationMode.wrappedValue.dismiss()
                 }
             }
         }
-        // Sheet for Safari view
-        .sheet(isPresented: $showingSafari, onDismiss: {
-            // When Safari is dismissed normally (without notification)
-            if !squareAuthService.isAuthenticated {
-                safariDismissed = true
-                isPolling = true
-                print("Safari sheet dismissed normally, starting intensive polling")
-                
-                // Start intensive polling
-                if squareAuthService.pendingAuthState != nil {
-                    print("Found pending auth state: \(squareAuthService.pendingAuthState!)")
-                    // Start polling with shorter interval for better responsiveness
-                    startIntensivePolling()
-                } else {
-                    print("WARNING: No pending auth state found after Safari dismissed!")
-                    squareAuthService.authError = "Authorization failed: No state parameter"
-                }
-            }
-        }) {
-            if let url = authURL {
-                // Use SafariView
-                SafariView(url: url, onDismiss: {
-                    showingSafari = false
-                })
-            }
-        }
-        .onDisappear {
-            // Clean up timer when view disappears
-            pollingTimer?.invalidate()
-            pollingTimer = nil
-            
-            // Remove observer
-            if let observer = notificationObserver {
-                NotificationCenter.default.removeObserver(observer)
-                notificationObserver = nil
-            }
-        }
-        // Monitor authentication state changes
         .onReceive(squareAuthService.$isAuthenticated) { isAuthenticated in
             if isAuthenticated {
                 print("Authentication successful")
                 hasCompletedOnboarding = true
-                safariDismissed = false
-                
-                // Give user time to see success message
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                     presentationMode.wrappedValue.dismiss()
                 }
@@ -220,120 +147,72 @@ struct SquareAuthorizationView: View {
         }
     }
     
-    // New function to handle OAuth callback notifications
-    private func handleOAuthCallback(_ notification: Notification) {
-        // If we received a notification with userInfo containing success/error
-        if let userInfo = notification.userInfo,
-           let success = userInfo["success"] as? Bool {
-            print("OAuth callback received with success: \(success)")
-            
-            // If authentication was successful, stop polling and check authentication
-            if success {
-                pollingTimer?.invalidate()
-                pollingTimer = nil
-                
-                // Use the checkAuthentication method to update the service state
-                squareAuthService.checkAuthentication()
-            } else {
-                // Handle failure
-                if let error = userInfo["error"] as? String {
-                    squareAuthService.authError = "Authorization failed: \(error)"
-                } else {
-                    squareAuthService.authError = "Authorization failed"
-                }
-                
-                // Stop authenticating state
-                squareAuthService.isAuthenticating = false
-            }
-        }
-        // If we received the notification with a URL object
-        else if let url = notification.object as? URL {
-            print("Received OAuth callback with URL: \(url)")
-            
-            // Try to extract success from URL components
-            if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-               let successItem = components.queryItems?.first(where: { $0.name == "success" }),
-               let successValue = successItem.value {
-                let success = successValue == "true"
-                
-                // Handle success or failure
-                if success {
-                    // Success case - stop polling and check authentication
-                    pollingTimer?.invalidate()
-                    pollingTimer = nil
-                    squareAuthService.checkAuthentication()
-                } else {
-                    // Failure case
-                    let error = components.queryItems?.first(where: { $0.name == "error" })?.value
-                    squareAuthService.authError = "Authorization failed: \(error ?? "Unknown error")"
-                    squareAuthService.isAuthenticating = false
-                }
-            }
-        }
-    }
-    
-    // Function to start more intensive polling after Safari is dismissed
-    private func startIntensivePolling() {
-        // Cancel any existing timer
-        pollingTimer?.invalidate()
-        
-        // Create a timer that checks status more frequently (every 0.5 seconds)
-        pollingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-            squareAuthService.checkPendingAuthorization { success in
-                if success {
-                    print("Polling found successful authentication")
-                    pollingTimer?.invalidate()
-                    pollingTimer = nil
-                }
-            }
-        }
-        
-        // Also immediately check once
-        squareAuthService.checkPendingAuthorization { _ in }
-        
-        // Set a timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
-            guard self.safariDismissed && !self.squareAuthService.isAuthenticated else { return }
-            
-            self.pollingTimer?.invalidate()
-            self.pollingTimer = nil
-            self.squareAuthService.authError = "Connection timed out. Please try again."
-            print("Polling timed out after 30 seconds")
-        }
-    }
-    
     private func startAuth() {
-        print("Starting Square OAuth flow...")
+        print("🔄 Starting Square OAuth flow with ASWebAuthenticationSession...")
         
         // Get authorization URL from your backend
         SquareConfig.generateOAuthURL { url, error, state in
             DispatchQueue.main.async {
                 if let error = error {
-                    squareAuthService.authError = "Failed to generate authorization URL: \(error.localizedDescription)"
+                    authSessionManager.authError = "Failed to generate authorization URL: \(error.localizedDescription)"
                     return
                 }
                 
                 guard let url = url else {
-                    squareAuthService.authError = "Failed to generate authorization URL"
+                    authSessionManager.authError = "Failed to generate authorization URL"
                     return
                 }
                 
                 // Set state if available
                 if let state = state {
-                    print("Setting pendingAuthState to: \(state)")
+                    print("📝 Setting pendingAuthState to: \(state)")
                     squareAuthService.pendingAuthState = state
                 } else {
-                    print("WARNING: No state returned from generateOAuthURL")
+                    print("⚠️ WARNING: No state returned from generateOAuthURL")
                 }
                 
-                // Store URL and update state
-                self.authURL = url
-                squareAuthService.isAuthenticating = true
-                safariDismissed = false
-                
-                // Show Safari
-                self.showingSafari = true
+                // Start authentication session
+                authSessionManager.startAuthentication(
+                    with: url,
+                    callbackURLScheme: "shulpad" // Your custom URL scheme
+                ) { callbackURL, error in
+                    handleAuthenticationResult(callbackURL: callbackURL, error: error)
+                }
             }
+        }
+    }
+    
+    private func handleAuthenticationResult(callbackURL: URL?, error: Error?) {
+        print("🔄 Processing authentication result...")
+        
+        if let error = error {
+            print("❌ Authentication error: \(error)")
+            if case ASWebAuthenticationSessionError.canceledLogin = error {
+                // User cancelled - don't show error
+                print("🚪 User cancelled authentication")
+            } else {
+                authSessionManager.authError = "Authentication failed: \(error.localizedDescription)"
+            }
+            return
+        }
+        
+        guard let callbackURL = callbackURL else {
+            print("❌ No callback URL received")
+            authSessionManager.authError = "No callback URL received"
+            return
+        }
+        
+        print("✅ Received callback URL: \(callbackURL)")
+        
+        // Process the callback URL
+        squareAuthService.handleOAuthCallback(url: callbackURL)
+        
+        // Start polling for authentication status
+        if squareAuthService.pendingAuthState != nil {
+            squareAuthService.startPollingForAuthStatus()
+        } else {
+            print("⚠️ No pending auth state, starting fallback polling")
+            squareAuthService.checkAuthentication()
         }
     }
 }
