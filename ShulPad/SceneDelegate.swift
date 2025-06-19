@@ -40,7 +40,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         // Handle URL scheme callbacks (e.g., for Square OAuth)
-        if let url = URLContexts.first?.url, url.scheme == "charitypad" {
+        if let url = URLContexts.first?.url, url.scheme == "shulpad" {
             print("SceneDelegate received URL: \(url)")
             
             // Check if this is the oauth-complete callback

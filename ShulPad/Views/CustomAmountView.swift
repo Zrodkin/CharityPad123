@@ -132,12 +132,6 @@ struct UpdatedCustomAmountView: View {
                             handleNumberPress("0")
                         }
                         
-                      
-                        .padding()
-                        .background(Color.orange)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                        
                         // Process Payment button
                         Button(action: {
                             handleDone()
