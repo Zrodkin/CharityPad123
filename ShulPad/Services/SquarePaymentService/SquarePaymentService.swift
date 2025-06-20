@@ -161,6 +161,12 @@ class SquarePaymentService: NSObject, ObservableObject {
         let availableReaders = MobilePaymentsSDK.shared.readerManager.readers
         let readyReaders = availableReaders.filter { $0.state == .ready }
         
+        // ADD THIS: Debug what we actually found
+        print("🔍 Found \(availableReaders.count) total readers, \(readyReaders.count) ready")
+        for reader in availableReaders {
+            print("   Reader: \(reader.serialNumber ?? "unknown") - State: \(reader.state)")
+        }
+        
         DispatchQueue.main.async {
             if readyReaders.isEmpty {
                 self.connectionStatus = "No readers connected. Use 'Manage Readers' to pair a reader."
@@ -219,7 +225,7 @@ class SquarePaymentService: NSObject, ObservableObject {
     
     private func validatePaymentPrerequisites(completion: @escaping (Bool, String?) -> Void) -> Bool {
         // Ensure SDK is initialized
-        guard let _ = try? MobilePaymentsSDK.shared else {
+        guard MobilePaymentsSDK.shared.authorizationManager.state == .authorized else {
             DispatchQueue.main.async { [weak self] in
                 self?.paymentError = "Square SDK not initialized"
                 completion(false, nil)
@@ -384,7 +390,7 @@ class SquarePaymentService: NSObject, ObservableObject {
     private func updateAvailablePaymentMethods() {
         guard isSDKAuthorized() else { return }
         
-        let cardInputMethods = MobilePaymentsSDK.shared.paymentManager.availableCardInputMethods
+        let _ = MobilePaymentsSDK.shared.paymentManager.availableCardInputMethods  // Silences warning
         
         DispatchQueue.main.async {
             self.hasAvailablePaymentMethods = true

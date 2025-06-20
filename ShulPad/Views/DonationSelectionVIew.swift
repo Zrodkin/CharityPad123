@@ -8,6 +8,7 @@ struct DonationSelectionView: View {
     @EnvironmentObject var paymentService: SquarePaymentService
     @EnvironmentObject private var organizationStore: OrganizationStore
     
+    
     @State private var navigateToCustomAmount = false
     @State private var navigateToCheckout = false
     @State private var navigateToHome = false
@@ -126,6 +127,8 @@ struct DonationSelectionView: View {
             }
         }
         .navigationDestination(isPresented: $navigateToHome) {
+            // Only navigate to HomeView if home page is enabled
+            // When disabled, handleNavigateToHome() should reset state instead of setting navigateToHome = true
             HomeView()
                 .navigationBarBackButtonHidden(true)
         }
@@ -146,6 +149,7 @@ struct DonationSelectionView: View {
         }
         .onDisappear {
             timeoutTimer?.invalidate()
+            timeoutTimer = nil
         }
         .onTapGesture {
             resetTimeout()
@@ -491,8 +495,14 @@ struct DonationSelectionView: View {
         // Reset donation state
         donationViewModel.resetDonation()
         
-        // Navigate to home
-        navigateToHome = true
+        // Only navigate if home page is enabled, otherwise just reset state
+        if kioskStore.homePageEnabled {
+            navigateToHome = true
+        } else {
+            // We're already at the "home" view, just reset everything
+            resetPaymentState()
+            // Don't set navigateToHome = true
+        }
     }
     
     // Process payment method (unchanged)
@@ -573,7 +583,11 @@ struct DonationSelectionView: View {
         donationViewModel.resetDonation()  // Clear donation state
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.navigateToHome = true
+            // Only navigate if home page is enabled, otherwise just reset state
+            if self.kioskStore.homePageEnabled {
+                self.navigateToHome = true
+            } else {
+            }
         }
     }
     
@@ -732,7 +746,13 @@ struct DonationSelectionView: View {
         timeoutTimer?.invalidate()
         let timeoutSeconds = Double(kioskStore.timeoutDuration) ?? 10.0
         timeoutTimer = Timer.scheduledTimer(withTimeInterval: timeoutSeconds, repeats: false) { _ in
-            navigateToHome = true
+            // Use the same logic as handleSuccessfulCompletion
+            if self.kioskStore.homePageEnabled {
+                self.navigateToHome = true
+            } else {
+                // When home is disabled, timeout should just reset the view state
+                self.resetPaymentState()
+            }
         }
     }
 

@@ -37,22 +37,29 @@ struct OnboardingView: View {
             VStack(spacing: 0) {
                 Spacer()
                 
-                // Logo
-                ZStack {
-                    Circle()
-                        .fill(Color.black.opacity(0.9))
-                        .frame(width: 120, height: 120)
-                    
+                // Logo - Glass morphism style (Circle)
+                Group {
                     if let logoImage = UIImage(named: "organization-image") {
                         Image(uiImage: logoImage)
                             .resizable()
-                            .scaledToFit()
-                            .frame(width: 90, height: 90)
-                            .clipShape(Circle())
+                            .scaledToFill()  // Changed to scaledToFill for better circle filling
+                            .frame(width: 100, height: 100)
+                            .clipShape(Circle())  // Changed to Circle
+                            .background(
+                                Circle()  // Changed to Circle
+                                    .fill(.ultraThinMaterial)
+                                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+                            )
                     } else {
-                        Text("Logo")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(.white)
+                        Circle()  // Changed to Circle
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 100, height: 100)
+                            .overlay(
+                                Text("Logo")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.primary)
+                            )
+                            .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
                     }
                 }
                 .padding(.bottom, 30)
@@ -75,7 +82,7 @@ struct OnboardingView: View {
                     FeatureRow(text: "Collect donations easily via Square")
                     FeatureRow(text: "Personalize your kiosk with your own branding")
                     FeatureRow(text: "See live donation reports and insights")
-                    FeatureRow(text: "Automatically send thank-ou emails to donors")
+                    FeatureRow(text: "Automatically send thank you emails to donors")
                 }
                 .padding(.bottom, 40)
                 

@@ -31,10 +31,9 @@ struct ContentView: View {
                     .environmentObject(donationViewModel)
                     .environmentObject(squareAuthService)
             } else {
-                HomeView()
-                    .environmentObject(donationViewModel)
-                    .environmentObject(kioskStore)
-                    .environmentObject(squareAuthService)
+                // 🆕 NEW: Handle kiosk mode routing at the top level with admin access
+                kioskModeView
+                    .adminAccess() // ← Add this line
             }
         }
         // Add this to force UI refresh when needed
@@ -66,6 +65,28 @@ struct ContentView: View {
             print("🚨 Received force logout notification - returning to onboarding")
             hasCompletedOnboarding = false
             isInAdminMode = false
+        }
+    }
+    
+    // 🆕 NEW: Kiosk mode view that decides between Home and DonationSelection
+    private var kioskModeView: some View {
+        Group {
+            if kioskStore.homePageEnabled {
+                // Show full HomeView when home page is enabled
+                HomeView()
+                    .environmentObject(donationViewModel)
+                    .environmentObject(kioskStore)
+                    .environmentObject(squareAuthService)
+            } else {
+                // Show DonationSelectionView directly when home page is disabled
+                // This gives it proper navigation context and layout
+                NavigationStack {
+                    DonationSelectionView()
+                        .onAppear {
+                            donationViewModel.resetDonation()
+                        }
+                }
+            }
         }
     }
     

@@ -188,7 +188,7 @@ struct UpdatedCustomAmountView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
-                    timeoutTimer?.invalidate()  // ADD this line
+                    timeoutTimer?.invalidate()
                     dismiss()
                 }) {
                     Image(systemName: "chevron.left")
@@ -215,6 +215,7 @@ struct UpdatedCustomAmountView: View {
         // ADD THESE MODIFIERS:
         .onDisappear {
             timeoutTimer?.invalidate()
+            timeoutTimer = nil
         }
         .onTapGesture {
             resetTimeout()
@@ -627,23 +628,48 @@ struct UpdatedCustomAmountView: View {
     }
     
     private func handleNavigateToHome() {
-        // Navigate directly to home view
-        navigateToHome = true
+        print("🏠 Navigating to home from CustomAmountView")
+        
+        // Reset navigation state
+        navigateToCheckout = false
+        
+        // Reset donation state
+        donationViewModel.resetDonation()
+        
+        // Only navigate if home page is enabled, otherwise dismiss to parent
+        if kioskStore.homePageEnabled {
+            navigateToHome = true
+        } else {
+            // Home page is disabled, so just dismiss back to DonationSelectionView
+            resetPaymentState()
+            dismiss()
+        }
     }
     
     private func handleSilentFailureOrCancellation() {
         paymentService.paymentError = nil
         resetPaymentState()
-        // Navigate directly to home instead of dismissing back to DonationSelectionView
-        navigateToHome = true
+        
+        // Handle navigation based on home page setting
+        if kioskStore.homePageEnabled {
+            navigateToHome = true
+        } else {
+            // Home page disabled, dismiss back to DonationSelectionView
+            dismiss()
+        }
     }
     
     private func handleSuccessfulCompletion() {
         resetPaymentState()
-        donationViewModel.resetDonation()  // Clear donation state
+        donationViewModel.resetDonation()
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.navigateToHome = true
+            if self.kioskStore.homePageEnabled {
+                self.navigateToHome = true
+            } else {
+                // Home page disabled, dismiss to DonationSelectionView
+                self.dismiss()
+            }
         }
     }
     

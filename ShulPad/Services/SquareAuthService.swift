@@ -176,13 +176,13 @@ class SquareAuthService: ObservableObject {
     
     
     func checkAuthentication() {
-        // 🔧 CRITICAL FIX: Don't check auth during explicit logout
+        Task { await ResilientBackendConfig.shared.refreshBackendURL() }
+        
         if isExplicitlyLoggingOut || logoutInProgress {
             print("🚫 Skipping auth check - logout in progress")
             return
         }
         
-        // 🔧 KEY FIX: If we have no local tokens, don't bother checking server
         guard let _ = accessToken,
               let expirationDate = tokenExpirationDate else {
             print("No local tokens found - setting isAuthenticated = false")
@@ -192,109 +192,352 @@ class SquareAuthService: ObservableObject {
         
         // Check if token is expired locally first
         if expirationDate <= Date() {
-            print("Local token is expired - setting isAuthenticated = false")
-            isAuthenticated = false
+            print("Local token is expired - attempting refresh...")
+            attemptTokenRefresh()
             return
         }
         
         print("Found valid local token, checking with server...")
-        
-        // Only check server if we have valid local tokens
-        guard let url = URL(string: "\(SquareConfig.backendBaseURL)\(SquareConfig.statusEndpoint)?organization_id=\(organizationId)&device_id=\(deviceId)") else {
+        performAuthCheck()
+    }
+
+
+    // Complete performAuthCheck method with deployment detection
+    private func performAuthCheck(retryCount: Int = 0) {
+        guard let url = URL(string: "\(ResilientBackendConfig.shared.getCurrentBackendURL())\(SquareConfig.statusEndpoint)?organization_id=\(organizationId)&device_id=\(deviceId)") else {
             print("Invalid status URL")
             isAuthenticated = false
             return
         }
         
-        print("Checking authentication status with server: \(url)")
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10.0 // Add timeout
         
-        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 
-                // 🔧 ADDITIONAL FIX: Double-check logout state before processing response
                 if self.isExplicitlyLoggingOut || self.logoutInProgress {
                     print("🚫 Logout started during network request - ignoring response")
                     return
                 }
                 
+                // Handle network errors with retry
                 if let error = error {
                     print("Error checking authentication: \(error)")
-                    self.isAuthenticated = false
-                    return
-                }
-                
-                // Print HTTP status code for debugging
-                if let httpResponse = response as? HTTPURLResponse {
-                    print("Status code: \(httpResponse.statusCode)")
-                }
-                
-                guard let data = data else {
-                    print("No data received")
-                    self.isAuthenticated = false
-                    return
-                }
-                
-                // Print raw response for debugging
-                let responseString = String(data: data, encoding: .utf8) ?? "Unable to decode response"
-                print("Authentication status response: \(responseString)")
-                
-                do {
-                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        if let connected = json["connected"] as? Bool {
-                            self.isAuthenticated = connected
-                            print("Authentication status check: isAuthenticated = \(connected)")
-                            
-                            // If we're connected, update the merchant ID and location ID if available
-                            if connected {
-                                if let merchantId = json["merchant_id"] as? String {
-                                    self.merchantId = merchantId
-                                    print("Updated merchant ID: \(merchantId)")
-                                }
+                    
+                    // Retry on network errors (up to 2 times)
+                    if retryCount < 2 {
+                        print("🔄 Retrying auth check in 2 seconds... (attempt \(retryCount + 1))")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            self.performAuthCheck(retryCount: retryCount + 1)
+                        }
+                        return
+                    }
+                    
+                    // 🔥 DEPLOYMENT DETECTION GOES HERE (after max retries)
+                    if retryCount >= 2 {
+                        // Check if backend is just temporarily down
+                        self.isBackendHealthy { [weak self] isHealthy in
+                            DispatchQueue.main.async {
+                                guard let self = self else { return }
                                 
-                                // Get and store location ID
-                                if let locationId = json["location_id"] as? String {
-                                    self.locationId = locationId
-                                    print("Updated location ID: \(locationId)")
-                                }
-                                
-                                // 🔧 FIX: Only update tokens if server provides them
-                                if let accessToken = json["access_token"] as? String {
-                                    self.accessToken = accessToken
-                                    print("Updated access token from server")
-                                }
-                                
-                                if let refreshToken = json["refresh_token"] as? String {
-                                    self.refreshToken = refreshToken
-                                    print("Updated refresh token from server")
-                                }
-                                
-                                // If expires_at is available, update that too
-                                if let expiresAt = json["expires_at"] as? String {
-                                    let dateFormatter = ISO8601DateFormatter()
-                                    if let expirationDate = dateFormatter.date(from: expiresAt) {
-                                        self.tokenExpirationDate = expirationDate
-                                        print("Updated token expiration: \(expirationDate)")
+                                if isHealthy {
+                                    // Backend is up but auth failed - real failure
+                                    self.isAuthenticated = false
+                                } else {
+                                    // Backend is down - probably deployment, keep trying
+                                    print("🔄 Backend appears to be down (deployment?), will retry...")
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+                                        self.performAuthCheck()
                                     }
                                 }
                             }
-                            
-                            // If token needs refresh, trigger refresh
-                            if let needsRefresh = json["needs_refresh"] as? Bool, needsRefresh {
-                                print("Token needs refresh, triggering refresh flow")
-                                self.refreshAccessToken()
+                        }
+                        return
+                    }
+                    
+                    self.isAuthenticated = false
+                    return
+                }
+                
+                // Handle HTTP errors
+                if let httpResponse = response as? HTTPURLResponse {
+                    print("Auth check status code: \(httpResponse.statusCode)")
+                    
+                    // Handle 401/403 with automatic token refresh
+                    if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                        print("🔄 Auth failed - attempting token refresh...")
+                        self.attemptTokenRefresh()
+                        return
+                    }
+                    
+                    // Handle 5xx errors (server issues) with retry
+                    if httpResponse.statusCode >= 500 && retryCount < 2 {
+                        print("🔄 Server error - retrying in 3 seconds... (attempt \(retryCount + 1))")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                            self.performAuthCheck(retryCount: retryCount + 1)
+                        }
+                        return
+                    }
+                    
+                    // 🔥 DEPLOYMENT DETECTION FOR 5xx ERRORS TOO (after max retries)
+                    if httpResponse.statusCode >= 500 && retryCount >= 2 {
+                        // Check if backend is just temporarily down
+                        self.isBackendHealthy { [weak self] isHealthy in
+                            DispatchQueue.main.async {
+                                guard let self = self else { return }
+                                
+                                if isHealthy {
+                                    // Backend is up but returning 5xx - real server error
+                                    self.isAuthenticated = false
+                                } else {
+                                    // Backend is down - probably deployment, keep trying
+                                    print("🔄 Backend appears to be down (deployment?), will retry...")
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+                                        self.performAuthCheck()
+                                    }
+                                }
                             }
+                        }
+                        return
+                    }
+                }
+                
+                // Parse response
+                guard let data = data else {
+                    print("No data received")
+                    
+                    // 🔥 DEPLOYMENT DETECTION FOR NO DATA (after max retries)
+                    if retryCount >= 2 {
+                        self.isBackendHealthy { [weak self] isHealthy in
+                            DispatchQueue.main.async {
+                                guard let self = self else { return }
+                                
+                                if isHealthy {
+                                    // Backend is up but no data - weird error
+                                    self.isAuthenticated = false
+                                } else {
+                                    // Backend is down - probably deployment, keep trying
+                                    print("🔄 Backend appears to be down (deployment?), will retry...")
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+                                        self.performAuthCheck()
+                                    }
+                                }
+                            }
+                        }
+                        return
+                    }
+                    
+                    self.isAuthenticated = false
+                    return
+                }
+                
+                // Process successful response
+                self.processAuthResponse(data: data)
+            }
+        }.resume()
+    }
+    
+    // Process authentication response from server
+    private func processAuthResponse(data: Data) {
+        do {
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                // Check if we have a valid token
+                if let isConnected = json["connected"] as? Bool, isConnected,
+                   let accessToken = json["access_token"] as? String,
+                   let refreshToken = json["refresh_token"] as? String,
+                   let merchantId = json["merchant_id"] as? String,
+                   let locationId = json["location_id"] as? String,
+                   let expiresAt = json["expires_at"] as? String {
+                    
+                    // Store tokens
+                    self.accessToken = accessToken
+                    self.refreshToken = refreshToken
+                    self.merchantId = merchantId
+                    self.locationId = locationId
+                    
+                    // Parse expiration date
+                    let dateFormatter = ISO8601DateFormatter()
+                    if let expirationDate = dateFormatter.date(from: expiresAt) {
+                        self.tokenExpirationDate = expirationDate
+                        print("Token expires at: \(expirationDate)")
+                    } else {
+                        // Fallback: set expiration to 30 days from now
+                        self.tokenExpirationDate = Date().addingTimeInterval(30 * 24 * 60 * 60)
+                        print("Could not parse expiration date, set to 30 days from now")
+                    }
+                    
+                    self.isAuthenticated = true
+                    self.authError = nil
+                    
+                    print("✅ Authentication verified with server")
+                    print("📍 Location ID: \(locationId)")
+                    print("🏢 Merchant ID: \(merchantId)")
+                    
+                    // Update token status if available
+                    if let refreshToken = json["refresh_token"] as? String {
+                        self.refreshToken = refreshToken
+                        print("Updated refresh token from server")
+                    }
+                    
+                    // If expires_at is available, update that too
+                    if let expiresAt = json["expires_at"] as? String {
+                        let dateFormatter = ISO8601DateFormatter()
+                        if let expirationDate = dateFormatter.date(from: expiresAt) {
+                            self.tokenExpirationDate = expirationDate
+                            print("Updated token expiration: \(expirationDate)")
+                        }
+                    }
+                    
+                    // If token needs refresh, trigger refresh
+                    if let needsRefresh = json["needs_refresh"] as? Bool, needsRefresh {
+                        print("Token needs refresh, triggering refresh flow")
+                        self.attemptTokenRefresh()
+                    }
+                } else {
+                    self.isAuthenticated = false
+                    print("Not connected according to server response")
+                }
+            } else {
+                self.isAuthenticated = false
+                print("Failed to parse server response as JSON")
+            }
+        } catch {
+            print("Error parsing authentication response: \(error)")
+            self.isAuthenticated = false
+        }
+    }
+
+    // NEW: Check if backend is healthy before giving up
+    private func isBackendHealthy(completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "\(ResilientBackendConfig.shared.getCurrentBackendURL())/api/health") else {
+            completion(false)
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5.0
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let httpResponse = response as? HTTPURLResponse,
+                   httpResponse.statusCode == 200 {
+                    completion(true)
+                } else {
+                    completion(false)
+                }
+            }
+        }.resume()
+    }
+
+    // NEW: Attempt token refresh with fallback
+    private func attemptTokenRefresh() {
+        guard let refreshToken = refreshToken else {
+            print("No refresh token available - user needs to re-authenticate")
+            isAuthenticated = false
+            return
+        }
+        
+        print("🔄 Attempting to refresh expired/invalid token...")
+        refreshAccessToken(refreshToken: refreshToken) { [weak self] success in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                
+                if success {
+                    print("✅ Token refresh successful - rechecking authentication")
+                    // Re-check auth after successful refresh
+                    self.performAuthCheck()
+                } else {
+                    print("❌ Token refresh failed - user needs to re-authenticate")
+                    self.isAuthenticated = false
+                }
+            }
+        }
+    }
+
+    // UPDATED: Refresh token with completion handler
+    func refreshAccessToken(refreshToken: String, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "\(SquareConfig.backendBaseURL)\(SquareConfig.refreshEndpoint)") else {
+            authError = "Invalid refresh URL"
+            completion(false)
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15.0 // Longer timeout for refresh
+        
+        let body: [String: Any] = [
+            "organization_id": organizationId,
+            "device_id": deviceId,
+            "refresh_token": refreshToken
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            authError = "Failed to serialize request: \(error.localizedDescription)"
+            completion(false)
+            return
+        }
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            DispatchQueue.main.async {
+                guard let self = self else {
+                    completion(false)
+                    return
+                }
+                
+                if let error = error {
+                    self.authError = "Network error: \(error.localizedDescription)"
+                    completion(false)
+                    return
+                }
+                
+                guard let data = data else {
+                    self.authError = "No data received"
+                    completion(false)
+                    return
+                }
+                
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        if let error = json["error"] as? String {
+                            self.authError = "Refresh error: \(error)"
+                            completion(false)
+                            return
+                        }
+                        
+                        // Update tokens from response
+                        if let newAccessToken = json["access_token"] as? String,
+                           let newRefreshToken = json["refresh_token"] as? String {
+                            
+                            self.accessToken = newAccessToken
+                            self.refreshToken = newRefreshToken
+                            
+                            // Update expiration if provided
+                            if let expiresAt = json["expires_at"] as? String {
+                                let dateFormatter = ISO8601DateFormatter()
+                                if let expirationDate = dateFormatter.date(from: expiresAt) {
+                                    self.tokenExpirationDate = expirationDate
+                                }
+                            }
+                            
+                            print("✅ Square token refreshed successfully!")
+                            completion(true)
                         } else {
-                            self.isAuthenticated = false
-                            print("Not connected according to server response")
+                            self.authError = "Invalid refresh response format"
+                            completion(false)
                         }
                     } else {
-                        self.isAuthenticated = false
-                        print("Failed to parse server response as JSON")
+                        self.authError = "Invalid response format"
+                        completion(false)
                     }
                 } catch {
-                    print("Error parsing authentication response: \(error)")
-                    self.isAuthenticated = false
+                    self.authError = "Failed to parse response: \(error.localizedDescription)"
+                    completion(false)
                 }
             }
         }.resume()
@@ -762,67 +1005,25 @@ class SquareAuthService: ObservableObject {
     // MARK: - Token Management
     
     func refreshAccessToken() {
-        guard let url = URL(string: "\(SquareConfig.backendBaseURL)\(SquareConfig.refreshEndpoint)") else {
-            authError = "Invalid refresh URL"
+        guard let refreshToken = refreshToken else {
+            authError = "No refresh token available"
+            isAuthenticated = false
             return
         }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let body: [String: Any] = [
-            "organization_id": organizationId,
-            "device_id": deviceId
-        ]
-        
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        } catch {
-            authError = "Failed to serialize request: \(error.localizedDescription)"
-            return
-        }
-        
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        refreshAccessToken(refreshToken: refreshToken) { [weak self] success in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 
-                if let error = error {
-                    self.authError = "Network error: \(error.localizedDescription)"
-                    self.isAuthenticated = false
-                    return
-                }
-                
-                guard let data = data else {
-                    self.authError = "No data received"
-                    self.isAuthenticated = false
-                    return
-                }
-                
-                do {
-                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        if let error = json["error"] as? String {
-                            self.authError = "Refresh error: \(error)"
-                            self.isAuthenticated = false
-                            return
-                        }
-                        
-                        if let success = json["success"] as? Bool, success {
-                            self.isAuthenticated = true
-                            print("Square token refreshed successfully!")
-                        } else {
-                            self.isAuthenticated = false
-                        }
-                    } else {
-                        self.authError = "Invalid response format"
-                        self.isAuthenticated = false
-                    }
-                } catch {
-                    self.authError = "Failed to parse response: \(error.localizedDescription)"
+                if success {
+                    print("✅ Token refresh successful")
+                    self.isAuthenticated = true
+                } else {
+                    print("❌ Token refresh failed")
                     self.isAuthenticated = false
                 }
             }
-        }.resume()
+        }
     }
     
     func refreshTokenIfNeeded() {
@@ -836,7 +1037,18 @@ class SquareAuthService: ObservableObject {
         let sevenDaysInSeconds: TimeInterval = 7 * 24 * 60 * 60
         if Date().addingTimeInterval(sevenDaysInSeconds) > expirationDate {
             print("Access token will expire soon, refreshing...")
-            refreshAccessToken(refreshToken: refreshToken)
+            
+            // Use the new version with completion handler
+            refreshAccessToken(refreshToken: refreshToken) { [weak self] success in
+                DispatchQueue.main.async {
+                    if success {
+                        print("✅ Proactive token refresh successful")
+                    } else {
+                        print("❌ Proactive token refresh failed")
+                        self?.isAuthenticated = false
+                    }
+                }
+            }
         }
     }
     
@@ -941,6 +1153,8 @@ class SquareAuthService: ObservableObject {
         authorizationStartTime = nil
         print("🔄 Authorization state reset")
     }
+    
+
     
     
     // MARK: - Helper Methods

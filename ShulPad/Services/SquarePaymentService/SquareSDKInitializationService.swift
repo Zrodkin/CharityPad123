@@ -276,11 +276,16 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
     
     /// Check if the Square SDK is authorized
     func isSDKAuthorized() -> Bool {
-        guard checkIfInitialized() else { return false }
-        let isAuthorized = MobilePaymentsSDK.shared.authorizationManager.state == .authorized
+        guard checkIfInitialized() else {
+            print("❌ SDK not initialized")
+            return false
+        }
         
-        // Enhanced check: also verify we have location info
-        if isAuthorized {
+        let authState = MobilePaymentsSDK.shared.authorizationManager.state
+        
+        switch authState {
+        case .authorized:
+            // Verify we have location info
             if let location = MobilePaymentsSDK.shared.authorizationManager.location {
                 print("✅ SDK authorized with location: \(location.name) (\(location.id))")
                 return true
@@ -288,9 +293,41 @@ class SquareSDKInitializationService: NSObject, AuthorizationStateObserver {
                 print("⚠️ SDK authorized but no location info")
                 return false
             }
+            
+        case .authorizing:
+            print("⏳ SDK still authorizing...")
+            return false
+            
+        case .notAuthorized:
+            print("❌ SDK not authorized")
+            return false
+            
+        @unknown default:
+            print("❓ Unknown SDK authorization state: \(authState)")
+            return false
+        }
+    }
+
+    // Add a method to handle SDK re-authorization during disruptions
+    func handleSDKDisruption() {
+        print("🔧 Handling SDK disruption - attempting re-authorization...")
+        
+        guard let authService = authService,
+              let accessToken = authService.accessToken,
+              let locationID = authService.locationId else {
+            print("❌ Missing auth data for SDK re-authorization")
+            return
         }
         
-        return false
+        // Deauthorize first
+        MobilePaymentsSDK.shared.authorizationManager.deauthorize {
+            DispatchQueue.main.async {
+                print("🔄 Re-authorizing SDK after disruption...")
+                self.performAuthorization(accessToken: accessToken, locationID: locationID) {
+                    print("✅ SDK re-authorization completed")
+                }
+            }
+        }
     }
     
     /// Deauthorize the Square SDK
