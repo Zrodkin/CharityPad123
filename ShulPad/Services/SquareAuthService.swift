@@ -1327,6 +1327,10 @@ extension SquareAuthService {
         // [Move your existing server check logic here]
         // This prevents blocking the main thread
     }
+    func checkSubscriptionAccess() async -> Bool {
+        let subscriptionService = await SubscriptionService(authService: self)
+        return await subscriptionService.canLaunchKiosk()
+    }
 }
 
 extension Notification.Name {

@@ -1,14 +1,20 @@
 import UIKit
 import SwiftUI
 import SquareMobilePaymentsSDK
+import SquareInAppPaymentsSDK
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         
-        // ✅ FIXED: Initialize Square SDK immediately, config loading happens separately
+        // ✅ Initialize Square Mobile Payments SDK (existing - for reader payments)
         let applicationId = SquareConfig.clientID
         MobilePaymentsSDK.initialize(squareApplicationID: applicationId)
         print("✅ Square Mobile Payments SDK initialized successfully")
+        
+        // ✅ NEW: Initialize Square In-App Payments SDK (for subscription card collection)
+        // For v1.6.4, we only need to set the application ID
+        SQIPInAppPaymentsSDK.squareApplicationID = SquareConfig.clientID
+        print("✅ Square In-App Payments SDK configured successfully")
         
         // 🆕 Load dynamic configuration in background (non-blocking)
         SquareConfig.loadConfiguration { success in

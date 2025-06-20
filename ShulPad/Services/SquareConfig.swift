@@ -30,6 +30,11 @@ struct SquareConfig {
     static let refreshEndpoint = "/api/square/refresh"
     static let disconnectEndpoint = "/api/square/disconnect"
     
+    // 🆕 NEW: Subscription endpoints
+    static let subscriptionStatusEndpoint = "/api/subscriptions/status"
+    static let subscriptionCreateEndpoint = "/api/subscriptions/create"
+    static let paymentTokenEndpoint = "/api/payment/create-token"
+    
     // Organization identifier
     static let organizationId = "default"
     
@@ -39,7 +44,7 @@ struct SquareConfig {
     static let tokenURL = "https://connect.squareup.com/oauth2/token"
     static let revokeURL = "https://connect.squareup.com/oauth2/revoke"
     
-    // OAuth scopes
+    // 🆕 NEW: Updated scopes for subscriptions
     static let scopes = [
         "MERCHANT_PROFILE_READ",
         "PAYMENTS_WRITE",
@@ -47,8 +52,21 @@ struct SquareConfig {
         "PAYMENTS_READ",
         "ITEMS_READ",
         "ITEMS_WRITE",
-        "ORDERS_WRITE"
+        "ORDERS_WRITE",
+        "CUSTOMERS_READ",          // NEW: Required for subscriptions
+        "CUSTOMERS_WRITE",         // NEW: Required for subscriptions
+        "SUBSCRIPTIONS_READ",      // NEW: Required for subscriptions
+        "SUBSCRIPTIONS_WRITE"      // NEW: Required for subscriptions
     ]
+    
+    // 🆕 NEW: In-App Payments configuration
+    static let inAppPaymentsApplicationID = clientID // Same as your main app ID
+    
+    
+    // 🆕 NEW: Helper method to get location ID from auth service
+    static func getLocationID(from authService: SquareAuthService) -> String? {
+        return authService.locationId
+    }
     
     // 🚀 NEW: Fast startup configuration (ADD THIS METHOD)
     static func setDefaultConfiguration() {
